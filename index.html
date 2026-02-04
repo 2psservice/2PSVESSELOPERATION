@@ -7,8 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
-    <!-- Excel Parser Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Excel Parser Library with Style Support -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
 
     <style>
         body { font-family: 'Sarabun', sans-serif; background-color: #0f172a; color: #f8fafc; }
@@ -106,9 +106,14 @@
                         </h2>
                         <div class="text-slate-400 text-xs mt-1">Start: <span id="detailStartTime">08:00</span></div>
                     </div>
-                    <div class="text-right">
-                        <div class="text-2xl font-bold text-blue-400 font-mono" id="detailETC">--:--</div>
-                        <div class="text-xs text-slate-500">Est. Compl</div>
+                    <div class="text-right flex flex-col items-end">
+                        <div class="flex items-center gap-2 mb-1 bg-slate-900/50 px-3 py-1 rounded border border-slate-600">
+                            <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">SHIP PRODUCT (D+L)</span>
+                            <span class="text-yellow-400 font-bold font-mono text-xl leading-none" id="detailShipProduct">0</span>
+                            <span class="text-[10px] text-yellow-500/70 font-bold">U/Hr</span>
+                        </div>
+                        <div class="text-2xl font-bold text-blue-400 font-mono leading-none mt-1" id="detailETC">--:--</div>
+                        <div class="text-[10px] text-slate-500 mt-1">Est. Compl (Total)</div>
                     </div>
                 </div>
 
@@ -383,7 +388,7 @@
     </main>
 
     <footer class="text-center text-slate-600 text-xs py-4 mt-auto">
-        &copy; 2024 2PS VESSEL OPERATION V7.9 (Gang Status Overview)
+        &copy; 2024 2PS VESSEL OPERATION V8.1 (Excel Report)
     </footer>
 
     <!-- MODALS -->
@@ -464,7 +469,15 @@
 
     <div id="periodReportModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center modal-backdrop fade-in p-4">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh] text-slate-800">
-            <div class="bg-purple-600 p-4 border-b border-purple-500 flex justify-between items-center text-white"><h3 class="text-lg font-bold">Period Summary Report</h3><button onclick="closePeriodReport()" class="text-purple-200 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button></div>
+            <div class="bg-purple-600 p-4 border-b border-purple-500 flex justify-between items-center text-white">
+                <h3 class="text-lg font-bold">Period Summary Report</h3>
+                <div class="flex items-center">
+                    <button onclick="exportReportToExcel()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded shadow flex items-center gap-2 transition mr-2 text-xs font-bold border border-green-500">
+                        <i class="fa-solid fa-file-excel"></i> Export Excel
+                    </button>
+                    <button onclick="closePeriodReport()" class="text-purple-200 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+                </div>
+            </div>
             <div id="periodReportBody" class="p-4 overflow-y-auto bg-slate-50"></div>
             <div class="bg-gray-100 p-3 border-t border-gray-200 text-center flex justify-end"><button onclick="closePeriodReport()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded text-sm font-bold">Close</button></div>
         </div>
@@ -640,6 +653,241 @@
             reader.readAsArrayBuffer(file);
         }
         // --- EXCEL UPLOAD LOGIC END ---
+
+        // --- EXPORT REPORT TO EXCEL ---
+        window.exportReportToExcel = function() {
+            const v = window.appData.vessels.find(x => x.id === window.activeVesselId);
+            if (!v) return;
+
+            const wb = XLSX.utils.book_new();
+
+            // --- DATA PREPARATION ---
+            const logs = v.logs || [];
+            // Clone logs to sort without affecting original array
+            const sortedLogs = [...logs].sort((a,b) => a.timestamp - b.timestamp);
+
+            let totalLoad = 0;
+            let totalDisch = 0;
+            const gangStats = {};
+            const modelStats = {}; // Port -> Model -> Qty
+
+            sortedLogs.forEach(l => {
+                const qty = l.qty;
+                if(l.type === 'discharge') totalDisch += qty;
+                else totalLoad += qty;
+
+                if(!gangStats[l.gang]) gangStats[l.gang] = 0;
+                gangStats[l.gang] += qty;
+
+                const p = l.port ? l.port.trim().toUpperCase() : "UNKNOWN";
+                const m = l.model ? l.model.trim().toUpperCase() : "UNKNOWN";
+                if(!modelStats[p]) modelStats[p] = {};
+                if(!modelStats[p][m]) modelStats[p][m] = 0;
+                modelStats[p][m] += qty;
+            });
+
+            // 1. OVERVIEW SHEET
+            const overviewData = [];
+            const overviewStyleMap = {}; // Map: rowIdx -> styleObject
+            let rIdx = 0;
+
+            // Helper to add styled row
+            const addRow = (data, style = null) => {
+                overviewData.push(data);
+                if (style) overviewStyleMap[rIdx] = style;
+                rIdx++;
+            };
+
+            // Styles
+            const titleStyle = { font: { bold: true, sz: 14 }, fill: { fgColor: { rgb: "CCCCCC" } } };
+            const sectionStyle = { font: { bold: true }, fill: { fgColor: { rgb: "FFFFCC" } } }; // Light Yellow
+            const headerStyle = { font: { bold: true }, fill: { fgColor: { rgb: "E0E0E0" } } }; // Light Gray
+            const subHeaderStyle = { font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "4B5563" } } }; // Dark Gray
+
+            // CHANGE: Updated Title
+            addRow(["2PS VESSEL OPERATION REPORT"], titleStyle);
+            addRow(["Vessel Name", v.name]);
+            addRow(["Voyage", v.voy]);
+            addRow(["Export Date", new Date().toLocaleString('th-TH')]);
+            addRow([]);
+
+            addRow(["SUMMARY TOTALS"], sectionStyle);
+            addRow(["Operation", "Quantity"], headerStyle);
+            addRow(["Loading", totalLoad]);
+            addRow(["Discharge", totalDisch]);
+            addRow(["TOTAL", totalLoad + totalDisch]);
+            addRow([]);
+
+            addRow(["PRODUCTIVITY (Start to Finish)"], sectionStyle);
+            if(sortedLogs.length > 0) {
+                const start = sortedLogs[0].timestamp;
+                const end = sortedLogs[sortedLogs.length-1].timestamp;
+                const durationHrs = (end - start) / (1000 * 60 * 60);
+                const totalQty = totalLoad + totalDisch;
+                const rate = durationHrs > 0 ? (totalQty / durationHrs).toFixed(2) : 0;
+                
+                addRow(["First Record", new Date(start).toLocaleString('th-TH')]);
+                addRow(["Last Record", new Date(end).toLocaleString('th-TH')]);
+                addRow(["Duration (Hrs)", durationHrs.toFixed(2)]);
+                addRow(["Avg Product/Hour", rate]);
+            } else {
+                addRow(["No Data available"]);
+            }
+
+            addRow([]);
+            addRow(["GANG PERFORMANCE SUMMARY"], sectionStyle);
+            addRow(["Gang Name", "Total Units"], headerStyle);
+            Object.keys(gangStats).sort().forEach(g => {
+                addRow([g, gangStats[g]]);
+            });
+
+            addRow([]);
+            addRow(["PORT / MODEL SUMMARY"], sectionStyle);
+            addRow(["Port", "Model", "Quantity"], headerStyle);
+            Object.keys(modelStats).sort().forEach(p => {
+                Object.keys(modelStats[p]).sort().forEach(m => {
+                    addRow([p, m, modelStats[p][m]]);
+                });
+            });
+
+            const wsOverview = XLSX.utils.aoa_to_sheet(overviewData);
+            
+            // Apply Styles to Overview
+            Object.keys(overviewStyleMap).forEach(rowStr => {
+                const r = parseInt(rowStr);
+                const style = overviewStyleMap[r];
+                // Apply to first few columns (e.g., A-E) just to look nice
+                const range = XLSX.utils.decode_range(wsOverview['!ref']);
+                for (let c = range.s.c; c <= range.e.c; c++) {
+                    const cellRef = XLSX.utils.encode_cell({r: r, c: c});
+                    if (!wsOverview[cellRef]) wsOverview[cellRef] = { t: 's', v: '' }; // Create empty cell if needed for background
+                    wsOverview[cellRef].s = style;
+                }
+            });
+
+            // CHANGE: Auto-width adjustment (Increased widths)
+            const wscols = [{wch:35}, {wch:25}, {wch:15}];
+            wsOverview['!cols'] = wscols;
+
+            // CHANGE: Sheet Tab Color (Green)
+            if(!wsOverview['!properties']) wsOverview['!properties'] = {};
+            wsOverview['!properties'].tabColor = { rgb: "00FF00" };
+
+            XLSX.utils.book_append_sheet(wb, wsOverview, "Summary");
+
+            // 2. PERIOD BREAKDOWN SHEET
+            const periodData = [["Period", "Gang", "Port", "Model", "Qty"]];
+            
+            // Helper to determine period
+            const findPeriodName = (logTimestamp, gangName) => {
+                const logTime = new Date(logTimestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+                const gp = (v.gangPeriods && v.gangPeriods[gangName]) ? v.gangPeriods[gangName] : v.periods;
+                if(!gp) return "Unknown";
+                
+                for (let p of gp) {
+                    const start = p.start;
+                    const end = p.end ? p.end : "23:59";
+                    // Simple check spanning midnight might need complex logic, but sticking to basic range check for now
+                    if (logTime >= start && logTime <= end) return p.name;
+                    if (p.end === null && logTime >= start) return p.name; // Open ended last period
+                }
+                return "Unknown";
+            };
+
+            // Process data for pivot
+            const pivot = {}; // Period -> Gang -> Port -> Model -> Qty
+            
+            sortedLogs.forEach(l => {
+                const pName = findPeriodName(l.timestamp, l.gang);
+                const g = l.gang;
+                const port = l.port || "UNKNOWN";
+                const m = l.model || "UNKNOWN";
+
+                if(!pivot[pName]) pivot[pName] = {};
+                if(!pivot[pName][g]) pivot[pName][g] = {};
+                if(!pivot[pName][g][port]) pivot[pName][g][port] = {};
+                if(!pivot[pName][g][port][m]) pivot[pName][g][port][m] = 0;
+                pivot[pName][g][port][m] += l.qty;
+            });
+
+            // Flatten pivot to rows
+            Object.keys(pivot).sort().forEach(pName => {
+                Object.keys(pivot[pName]).sort().forEach(gang => {
+                    Object.keys(pivot[pName][gang]).sort().forEach(port => {
+                        Object.keys(pivot[pName][gang][port]).sort().forEach(model => {
+                            periodData.push([pName, gang, port, model, pivot[pName][gang][port][model]]);
+                        });
+                    });
+                });
+            });
+
+            const wsPeriod = XLSX.utils.aoa_to_sheet(periodData);
+            
+            // Style Header Row (Row 0)
+            const rangePeriod = XLSX.utils.decode_range(wsPeriod['!ref']);
+            for (let c = rangePeriod.s.c; c <= rangePeriod.e.c; c++) {
+                const cellRef = XLSX.utils.encode_cell({r: 0, c: c});
+                if (wsPeriod[cellRef]) {
+                    wsPeriod[cellRef].s = { 
+                        font: { bold: true }, 
+                        fill: { fgColor: { rgb: "D1FAE5" } }, // Light Green
+                        border: { bottom: { style: "thin", color: { rgb: "000000" } } }
+                    };
+                }
+            }
+
+            // CHANGE: Column Widths for Period
+            wsPeriod['!cols'] = [{wch:15}, {wch:15}, {wch:15}, {wch:25}, {wch:10}];
+
+            // CHANGE: Sheet Tab Color (Yellow)
+            if(!wsPeriod['!properties']) wsPeriod['!properties'] = {};
+            wsPeriod['!properties'].tabColor = { rgb: "FFFF00" };
+
+            XLSX.utils.book_append_sheet(wb, wsPeriod, "Period Breakdown");
+
+            // 3. DETAILED LOGS SHEET
+            const logSheetData = [["Date", "Time", "Type", "Gang", "Port", "Model", "Block/Lane", "Qty"]];
+            sortedLogs.forEach(l => {
+                const d = new Date(l.timestamp);
+                logSheetData.push([
+                    d.toLocaleDateString('th-TH'),
+                    d.toLocaleTimeString('th-TH'),
+                    (l.type || 'load').toUpperCase(),
+                    l.gang,
+                    l.port,
+                    l.model,
+                    l.lane,
+                    l.qty
+                ]);
+            });
+            const wsLogs = XLSX.utils.aoa_to_sheet(logSheetData);
+            
+            // Style Header Row (Row 0)
+            const rangeLogs = XLSX.utils.decode_range(wsLogs['!ref']);
+            for (let c = rangeLogs.s.c; c <= rangeLogs.e.c; c++) {
+                const cellRef = XLSX.utils.encode_cell({r: 0, c: c});
+                if (wsLogs[cellRef]) {
+                    wsLogs[cellRef].s = { 
+                        font: { bold: true }, 
+                        fill: { fgColor: { rgb: "D1FAE5" } }, 
+                        border: { bottom: { style: "thin", color: { rgb: "000000" } } }
+                    };
+                }
+            }
+
+            // CHANGE: Column Widths for Logs
+            wsLogs['!cols'] = [{wch:12}, {wch:10}, {wch:10}, {wch:15}, {wch:15}, {wch:25}, {wch:15}, {wch:10}];
+
+            // CHANGE: Sheet Tab Color (Red)
+            if(!wsLogs['!properties']) wsLogs['!properties'] = {};
+            wsLogs['!properties'].tabColor = { rgb: "FF0000" };
+
+            XLSX.utils.book_append_sheet(wb, wsLogs, "Detailed Logs");
+
+            // Save File
+            const fileName = `${v.name}_${v.voy}_Report.xlsx`.replace(/[\/\\?%*:|"<>]/g, '-');
+            XLSX.writeFile(wb, fileName);
+        }
 
         window.getGangData = function(v, gangName) {
             if (!v.gangPeriods || !v.gangPeriods[gangName]) return { status: 'working', periods: v.periods || [] };
@@ -920,7 +1168,39 @@
         window.renderVesselDetail = function() {
             if (document.activeElement.tagName === 'INPUT') { window.updateLiveTime(); return; }
             const v = window.appData.vessels.find(x => x.id === window.activeVesselId); if(!v) return window.goToOverview();
-            document.getElementById('detailVesselName').innerText = v.name; document.getElementById('detailVesselVoy').innerText = v.voy; document.getElementById('detailStartTime').innerText = v.startTime;
+            document.getElementById('detailVesselName').innerText = v.name; document.getElementById('detailVesselVoy').innerText = v.voy;
+            
+            // --- UPDATED START TIME LOGIC (First Record) ---
+            let displayTime = v.startTime;
+            let timeBadge = '<span class="text-slate-500 text-[10px] ml-1">(Plan)</span>';
+            let timeColor = "text-slate-300";
+
+            if (v.logs && v.logs.length > 0) {
+                // Find the very first log entry across ALL gangs and ALL types (Load/Disch)
+                const firstLog = v.logs.reduce((min, cur) => cur.timestamp < min.timestamp ? cur : min, v.logs[0]);
+                const d = new Date(firstLog.timestamp);
+                displayTime = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+                timeBadge = '<span class="text-green-500 text-[10px] ml-1 font-bold animate-pulse">(Actual)</span>';
+                timeColor = "text-green-400 font-bold text-lg";
+            }
+            
+            const startTimeEl = document.getElementById('detailStartTime');
+            startTimeEl.innerHTML = `<span class="${timeColor}">${displayTime}</span>${timeBadge}`;
+            // -----------------------------------------------
+
+            // --- UPDATE STATS (Including Ship Product) ---
+            const s = calculateVesselStats(v, window.currentOpMode);
+            document.getElementById('detailTotal').innerText = s.plan; 
+            document.getElementById('detailLoaded').innerText = s.loaded; 
+            document.getElementById('detailRemaining').innerText = s.remaining;
+            
+            // Update Ship Product (Global Rate)
+            const prodEl = document.getElementById('detailShipProduct');
+            if(prodEl) prodEl.innerText = s.shipProduct || 0;
+            // Update ETC
+            const etcEl = document.getElementById('detailETC'); 
+            if(etcEl) etcEl.innerText = s.etc;
+
             const isLoad = window.currentOpMode === 'load';
             document.getElementById('tabLoad').className = isLoad ? "flex-1 py-3 rounded-lg font-bold text-sm uppercase transition border-b-4 bg-green-500 text-white border-green-700 shadow-lg shadow-green-500/40 transform scale-105" : "flex-1 py-3 rounded-lg font-bold text-sm uppercase transition border-b-4 bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 opacity-70 hover:opacity-100";
             document.getElementById('tabDischarge').className = !isLoad ? "flex-1 py-3 rounded-lg font-bold text-sm uppercase transition border-b-4 bg-red-600 text-white border-red-800 shadow-lg shadow-red-600/40 transform scale-105" : "flex-1 py-3 rounded-lg font-bold text-sm uppercase transition border-b-4 bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 opacity-70 hover:opacity-100";
@@ -930,8 +1210,7 @@
             document.getElementById('colPortHeader2').innerText = isLoad ? 'Final Port' : 'Port Disch';
             document.getElementById('colLaneHeader').innerText = isLoad ? 'Block' : 'Deck';
 
-            const s = calculateVesselStats(v, window.currentOpMode);
-            document.getElementById('detailTotal').innerText = s.plan; document.getElementById('detailLoaded').innerText = s.loaded; document.getElementById('detailRemaining').innerText = s.remaining;
+            // REMOVED REDUNDANT DECLARATION HERE
             document.getElementById('lblLoaded').innerText = isLoad ? "Loaded" : "Discharged";
             const statCard = document.getElementById('statLoadedCard'); statCard.className = isLoad ? "glass-panel p-3 rounded-xl text-center border-t-4 border-green-500 cursor-pointer hover:bg-slate-700/50 transition active:scale-95" : "glass-panel p-3 rounded-xl text-center border-t-4 border-red-500 cursor-pointer hover:bg-slate-700/50 transition active:scale-95"; 
             document.getElementById('detailLoaded').className = isLoad ? "text-2xl font-bold text-green-400" : "text-2xl font-bold text-red-500"; 
@@ -946,13 +1225,55 @@
             if(sel.value) { const gColor = getGangColor(sel.value); sel.style.color = gColor; sel.style.borderColor = gColor; sel.style.boxShadow = `0 0 10px ${gColor}40`; const gd = window.getGangData(v, sel.value); statusDisp.classList.remove('hidden'); if(gd.status === 'break') { statusDisp.innerHTML = `<i class="fa-solid fa-mug-hot mr-1"></i> ${sel.value} is on <b>BREAK</b>`; statusDisp.className = "mt-2 text-center text-xs text-red-300 bg-red-900/30 border border-red-800 p-2 rounded animate-pulse"; } else { statusDisp.innerHTML = `<i class="fa-solid fa-bolt mr-1"></i> ${sel.value} is <b>WORKING</b>`; statusDisp.className = "mt-2 text-center text-xs text-green-300 bg-green-900/30 border border-green-800 p-2 rounded"; } } else { sel.style.color = "white"; sel.style.borderColor = "rgb(59 130 246)"; sel.style.boxShadow = "none"; statusDisp.classList.add('hidden'); }
             const tb = document.getElementById('detailTableBody'); if(tb) tb.innerHTML = ''; const curG = sel ? sel.value : ""; const portStats = {};
             let displayStocks = (v.stocks || []).filter(st => { const itemType = st.type || 'load'; return itemType === window.currentOpMode; });
-            displayStocks.sort((a, b) => { const portA = (a.port || "ZZZZ").toUpperCase(); const portB = (b.port || "ZZZZ").toUpperCase(); if (portA < portB) return -1; if (portA > portB) return 1; if (a.model < b.model) return -1; if (a.model > b.model) return 1; if ((a.lane||"") < (b.lane||"")) return -1; if ((a.lane||"") > (b.lane||"")) return 1; return 0; });
+            
+            // --- UPDATED SORTING LOGIC ---
+            displayStocks.sort((a, b) => { 
+                // 1. Check Balance (Done items go to bottom)
+                const remA = a.plan - Object.values(a.loadedMap||{}).reduce((x,y)=>x+y,0);
+                const remB = b.plan - Object.values(b.loadedMap||{}).reduce((x,y)=>x+y,0);
+                const isDoneA = remA === 0;
+                const isDoneB = remB === 0;
+
+                if (isDoneA && !isDoneB) return 1; // A done, B active -> A goes down
+                if (!isDoneA && isDoneB) return -1; // A active, B done -> A goes up
+
+                // 2. Standard Sort (Port -> Model -> Lane)
+                const portA = (a.port || "ZZZZ").toUpperCase(); 
+                const portB = (b.port || "ZZZZ").toUpperCase(); 
+                if (portA < portB) return -1; 
+                if (portA > portB) return 1; 
+                if (a.model < b.model) return -1; 
+                if (a.model > b.model) return 1; 
+                if ((a.lane||"") < (b.lane||"")) return -1; 
+                if ((a.lane||"") > (b.lane||"")) return 1; 
+                return 0; 
+            });
+
             displayStocks.forEach(st => {
                 const l = Object.values(st.loadedMap||{}).reduce((a,b)=>a+b,0); const rem = st.plan - l; const myL = (curG && st.loadedMap && st.loadedMap[curG]) || 0;
                 const pColor = getPortColor(st.port); const pName = st.port ? st.port.trim().toUpperCase() : "UNKNOWN";
                 if(!portStats[pName]) portStats[pName] = { plan: 0, loaded: 0 }; portStats[pName].plan += st.plan; portStats[pName].loaded += l;
                 const btnColor = isLoad ? 'bg-green-600 hover:bg-green-500 shadow-green-500/30' : 'bg-red-600 hover:bg-red-500 shadow-red-500/30';
-                tb.innerHTML += `<tr class="${rem===0?'bg-green-900/10':''}" style="border-left: 4px solid ${pColor}"><td class="p-3 text-xs font-bold uppercase min-w-[100px]" style="color: ${pColor}">${st.port || '-'}</td><td class="p-3 text-xs font-bold text-gray-400 min-w-[100px]">${st.port2 || '-'}</td><td class="p-3 font-bold text-white min-w-[70px]">${st.model}</td><td class="p-3 text-blue-300 font-mono text-xs min-w-[70px]">${st.lane}</td><td class="p-3 text-center bg-slate-800/30 border-x border-slate-700 min-w-[140px]">${rem > 0 || l > 0 ? `<div class="flex gap-1 justify-center items-center"><button onclick="submitLoad(${v.id},${st.id}, -1)" class="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-l text-sm shadow-lg transform active:scale-95 transition"><i class="fa-solid fa-minus"></i></button><input type="number" id="inp_load_${st.id}" class="w-16 bg-slate-700 text-white text-center border-y border-slate-500 py-1.5 text-base font-bold shadow-inner" placeholder="#" onkeypress="if(event.key==='Enter') submitLoad(${v.id}, ${st.id})"><button onclick="submitLoad(${v.id},${st.id}, 1)" class="${btnColor} text-white px-3 py-1.5 rounded-r text-sm shadow-lg transform active:scale-95 transition"><i class="fa-solid fa-plus"></i></button></div>` : '<span class="text-green-500 text-xs font-bold"><i class="fa-solid fa-check mr-1"></i>DONE</span>'}</td><td class="p-3 text-center">${st.plan}</td><td class="p-3 text-center font-bold text-white bg-slate-700/20">${l}</td><td class="p-3 text-center text-blue-400 border-l border-slate-600">${myL||'-'}</td><td class="p-3 text-center ${rem===0?'text-green-500':'text-orange-400'}">${rem}</td></tr>`;
+                
+                // Determine Row Styling
+                let rowClass = "";
+                let textClass = "text-white";
+                let portColorStyle = `color: ${pColor}`;
+                let modelColor = "text-white";
+                
+                if (rem === 0) {
+                    // Finished Item Style (Grayed out)
+                    rowClass = "bg-gray-900/50 grayscale opacity-50"; 
+                    textClass = "text-gray-500";
+                    modelColor = "text-gray-500";
+                    // Keep port color indicator but maybe dim it via opacity, handled by grayscale class mostly
+                } else {
+                    // Active Item Style
+                    rowClass = ""; // Default transparent/glass
+                    textClass = "text-white";
+                }
+
+                tb.innerHTML += `<tr class="${rowClass} transition-all duration-500" style="border-left: 4px solid ${pColor}"><td class="p-3 text-xs font-bold uppercase min-w-[100px]" style="${rem===0?'color:gray':portColorStyle}">${st.port || '-'}</td><td class="p-3 text-xs font-bold text-gray-400 min-w-[100px]">${st.port2 || '-'}</td><td class="p-3 font-bold ${modelColor} min-w-[70px]">${st.model}</td><td class="p-3 text-blue-300 font-mono text-xs min-w-[70px]">${st.lane}</td><td class="p-3 text-center bg-slate-800/30 border-x border-slate-700 min-w-[140px]">${rem > 0 || l > 0 ? `<div class="flex gap-1 justify-center items-center"><button onclick="submitLoad(${v.id},${st.id}, -1)" class="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-l text-sm shadow-lg transform active:scale-95 transition"><i class="fa-solid fa-minus"></i></button><input type="number" id="inp_load_${st.id}" class="w-16 bg-slate-700 text-white text-center border-y border-slate-500 py-1.5 text-base font-bold shadow-inner" placeholder="#" onkeypress="if(event.key==='Enter') submitLoad(${v.id}, ${st.id})"><button onclick="submitLoad(${v.id},${st.id}, 1)" class="${btnColor} text-white px-3 py-1.5 rounded-r text-sm shadow-lg transform active:scale-95 transition"><i class="fa-solid fa-plus"></i></button></div>` : '<span class="text-green-500 text-xs font-bold"><i class="fa-solid fa-check mr-1"></i>DONE</span>'}</td><td class="p-3 text-center ${textClass}">${st.plan}</td><td class="p-3 text-center font-bold ${textClass} bg-slate-700/20">${l}</td><td class="p-3 text-center text-blue-400 border-l border-slate-600">${myL||'-'}</td><td class="p-3 text-center ${rem===0?'text-green-500 font-bold':'text-orange-400 font-bold'}">${rem}</td></tr>`;
             });
             const gg = document.getElementById('detailGangGrid'); if(gg) {
                 gg.innerHTML = ''; const gangStats = {}; let shipStats = { qty: 0, startTime: Infinity, endTime: 0 };
@@ -1011,7 +1332,7 @@
             if(!window.appData.gangs) window.appData.gangs = ["Gang 1", "Gang 2", "Gang 3", "Gang 4"]; 
             if(!window.appData.disabledGangs) window.appData.disabledGangs = []; // Ensure disabledGangs exists
             if(!window.appData.breaks) window.appData.breaks = []; 
-            if(!window.appData.portColors) window.appData.portColors = { "JAPAN":"#22c55e", "IND":"#f97316", "USA":"#3b82f6" }; 
+            if(!window.appData.portColors) window.appData.portColors = { "JAPAN": "#22c55e", "IND": "#f97316", "USA": "#3b82f6" }; 
             if(!window.appData.adminAuth) window.appData.adminAuth = { user: "admin", pass: "999999999" };
         }
         
@@ -1100,7 +1421,11 @@
              const now = new Date(); const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' }); const dateStr = now.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
              const clockTimeEl = document.getElementById('clockTime'); const clockDateEl = document.getElementById('clockDate');
              if(clockTimeEl) clockTimeEl.innerText = timeStr; if(clockDateEl) clockDateEl.innerText = dateStr;
-             const v = window.appData.vessels.find(x => x.id === window.activeVesselId); if(v) { const s = calculateVesselStats(v, window.currentOpMode); const etcEl = document.getElementById('detailETC'); if(etcEl) etcEl.innerText = s.etc; }
+             const v = window.appData.vessels.find(x => x.id === window.activeVesselId); if(v) { 
+                 const s = calculateVesselStats(v, window.currentOpMode); 
+                 const etcEl = document.getElementById('detailETC'); if(etcEl) etcEl.innerText = s.etc; 
+                 const prodEl = document.getElementById('detailShipProduct'); if(prodEl) prodEl.innerText = s.shipProduct || 0;
+             }
         }
 
         window.hardReset = function() { if(confirm("⚠ DANGER: This will delete ALL data. Confirm?")) { window.appData = { vessels: [], gangs: ["Gang 1"], breaks: [] }; window.saveData(); location.reload(); } }
@@ -1137,7 +1462,20 @@
             const inp = document.getElementById(`inp_load_${sId}`); let qty = parseInt(inp.value); if (!qty) return; qty = Math.abs(qty) * sign;
             const s = (v.stocks || []).find(x => x.id === sId); if (!s) return;
             const loaded = Object.values(s.loadedMap||{}).reduce((a,b)=>a+b,0);
-            if (qty > 0) { if(qty > (s.plan - loaded)) { if(!confirm("Over plan? Confirm?")) return; } } else { if ((loaded + qty) < 0) { window.showAlert("Cannot reduce below 0!"); return; } }
+            
+            // VALIDATION: Prevent Over Plan
+            if (qty > 0) { 
+                if ((loaded + qty) > s.plan) { 
+                    window.showAlert(`⛔ Cannot Submit!\nTotal exceeds Plan limit.\n(Plan: ${s.plan}, Current: ${loaded}, Adding: ${qty})`); 
+                    return; 
+                } 
+            } else { 
+                if ((loaded + qty) < 0) { 
+                    window.showAlert("Cannot reduce below 0!"); 
+                    return; 
+                } 
+            }
+
             if(!s.loadedMap) s.loadedMap = {}; if(!s.loadedMap[gangName]) s.loadedMap[gangName] = 0;
             if (qty < 0 && (s.loadedMap[gangName] + qty) < 0) { window.showAlert(`Cannot reduce! ${gangName} loaded only ${s.loadedMap[gangName]}.`); return; }
             s.loadedMap[gangName] += qty; if (!v.logs) v.logs = [];
@@ -1250,22 +1588,61 @@
         }
 
         function calculateVesselStats(v, mode = null) {
-            let p=0, l=0; (v.stocks || []).forEach(s => { if (!mode || s.type === mode || (!s.type && mode === 'load')) { p+=s.plan; l+=(Object.values(s.loadedMap||{}).reduce((a,b)=>a+b,0)); } });
-            let etc = "--:--"; if (l > 0 && (p - l) > 0 && v.logs && v.logs.length > 0) {
-                const relevantLogs = v.logs.filter(log => { const logType = log.type || 'load'; return !mode || logType === mode; });
-                if (relevantLogs.length > 0) {
-                    relevantLogs.sort((a,b) => a.timestamp - b.timestamp); const startTime = relevantLogs[0].timestamp; const durationMs = Date.now() - startTime;
-                    if (durationMs > 60000) { 
-                        const rateMs = l / durationMs; 
-                        const remainingMs = (p - l) / rateMs; 
-                        const etcDate = new Date(Date.now() + remainingMs); 
-                        const dStr = etcDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }).toUpperCase();
-                        const tStr = etcDate.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-                        etc = `${dStr} ${tStr}`; 
-                    } else { etc = "Calc..."; }
+            // 1. Calculate Specific Stats (for specific mode columns like 'plan', 'loaded')
+            let p = 0, l = 0;
+            (v.stocks || []).forEach(s => {
+                if (!mode || s.type === mode || (!s.type && mode === 'load')) {
+                    p += s.plan;
+                    l += (Object.values(s.loadedMap || {}).reduce((a, b) => a + b, 0));
                 }
-            } else if (p > 0 && (p - l) <= 0) etc = "Done";
-            return { plan:p, loaded:l, remaining:p-l, etc };
+            });
+
+            // 2. Calculate GLOBAL Stats (Specifically for ETC & SHIP PRODUCT)
+            // The user wants ETC & Product to represent the WHOLE ship finishing (Discharge + Load)
+            let totalPlan = 0;
+            let totalLoaded = 0;
+            (v.stocks || []).forEach(s => {
+                totalPlan += s.plan;
+                totalLoaded += (Object.values(s.loadedMap || {}).reduce((a, b) => a + b, 0));
+            });
+
+            let etc = "--:--";
+            let shipProduct = 0;
+            const remainingGlobal = totalPlan - totalLoaded;
+
+            // Calculate Rate based on TOTAL Activity (Load + Discharge)
+            if (totalLoaded > 0 && v.logs && v.logs.length > 0) {
+                // Get ALL logs regardless of mode
+                const allLogs = v.logs;
+
+                // Sort logs to ensure we find the true start time
+                const sortedLogs = [...allLogs].sort((a, b) => a.timestamp - b.timestamp);
+                const startTime = sortedLogs[0].timestamp;
+                const durationMs = Date.now() - startTime;
+
+                // Only calculate if working for > 1 minute
+                if (durationMs > 60000) {
+                    const rateMs = totalLoaded / durationMs; // Units per millisecond
+                    shipProduct = Math.round(rateMs * 1000 * 60 * 60); // Convert to Units/Hr
+
+                    if (remainingGlobal > 0) {
+                        const timeToFinishMs = remainingGlobal / rateMs;
+                        const etcDate = new Date(Date.now() + timeToFinishMs);
+                        const dStr = etcDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+                        const tStr = etcDate.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+                        etc = `${dStr} ${tStr}`;
+                    } else if (remainingGlobal <= 0) {
+                         etc = "Done";
+                    }
+                } else {
+                    etc = "Calc...";
+                }
+            } else if (totalPlan > 0 && remainingGlobal <= 0) {
+                etc = "Done";
+            }
+
+            // Return original specific stats for UI cards + GLOBAL ETC/PRODUCT
+            return { plan: p, loaded: l, remaining: p - l, etc, shipProduct };
         }
 
         function renderOverview() {

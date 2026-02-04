@@ -7,6 +7,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <!-- Excel Parser Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
     <style>
         body { font-family: 'Sarabun', sans-serif; background-color: #0f172a; color: #f8fafc; }
@@ -198,11 +200,12 @@
                     <table class="w-full text-left">
                         <thead class="bg-slate-700 text-slate-300 uppercase text-xs">
                             <tr>
-                                <th class="p-3 text-left text-yellow-400" id="colPortHeader">Port</th>
+                                <th class="p-3 text-left text-yellow-400 min-w-[100px]" id="colPortHeader1">Port</th>
+                                <th class="p-3 text-left min-w-[100px]" id="colPortHeader2">Sec. Port</th>
                                 <th class="p-3 min-w-[70px]">Model</th>
-                                <th class="p-3 min-w-[70px]">Lane</th>
-                                <th class="p-3 text-center min-w-[140px] bg-blue-900/30 text-blue-300 border-x border-slate-600">Action (+/-)</th>
                                 <th class="p-3 text-center">Plan</th>
+                                <th class="p-3 min-w-[70px]" id="colLaneHeader">Block</th>
+                                <th class="p-3 text-center min-w-[140px] bg-blue-900/30 text-blue-300 border-x border-slate-600">Action (+/-)</th>
                                 <th class="p-3 text-center bg-slate-600/50">Total</th>
                                 <th class="p-3 text-center text-blue-300 border-l border-slate-600">My</th>
                                 <th class="p-3 text-center">Bal</th>
@@ -239,7 +242,13 @@
 
         <!-- VIEW 3: ADMIN SETUP -->
         <div id="view-admin" class="hidden fade-in">
-            <h2 class="text-2xl font-bold mb-6 text-white border-l-4 border-purple-500 pl-4">System Setup</h2>
+            <div class="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
+                <h2 class="text-2xl font-bold text-white border-l-4 border-purple-500 pl-4">System Setup</h2>
+                <button onclick="logoutAdmin()" class="text-red-400 text-xs hover:text-red-500 border border-red-500/50 px-3 py-1 rounded">
+                    <i class="fa-solid fa-right-from-bracket mr-2"></i>Logout Admin
+                </button>
+            </div>
+            
             <div class="grid md:grid-cols-3 gap-6">
                 <!-- Settings -->
                 <div class="space-y-6">
@@ -284,47 +293,84 @@
                 <div class="md:col-span-2 space-y-6">
                     <div class="bg-white p-6 rounded-xl text-black shadow-lg shadow-slate-900/50">
                         <h3 class="text-lg font-bold mb-4 text-green-800 border-b pb-2"><i class="fa-solid fa-layer-group mr-2"></i>2. Manage Stock</h3>
-                        <div class="mb-4">
-                            <label class="block text-xs font-bold text-gray-500 mb-1">Select Vessel to Edit:</label>
-                            <select id="adminVesselSelect" onchange="renderAdminStockTable()" class="w-full p-2 border-2 border-green-500 rounded bg-green-50 font-bold text-gray-800">
-                                <option value="">-- No Vessel --</option>
-                            </select>
+                        <div class="flex justify-between items-end mb-4 gap-2">
+                            <div class="flex-grow">
+                                <label class="block text-xs font-bold text-gray-500 mb-1">Select Vessel to Edit:</label>
+                                <select id="adminVesselSelect" onchange="renderAdminStockTable()" class="w-full p-2 border-2 border-green-500 rounded bg-green-50 font-bold text-gray-800">
+                                    <option value="">-- No Vessel --</option>
+                                </select>
+                            </div>
+                            <div class="shrink-0">
+                                <input type="file" id="excelUpload" accept=".xlsx, .xls" class="hidden" onchange="handleExcelUpload()">
+                                <button onclick="document.getElementById('excelUpload').click()" class="bg-green-700 hover:bg-green-800 text-white font-bold py-2.5 px-4 rounded shadow flex items-center text-sm border border-green-900">
+                                    <i class="fa-solid fa-file-excel mr-2 text-white"></i> Import Excel
+                                </button>
+                            </div>
                         </div>
                         <div class="flex gap-4 mb-2 bg-gray-100 p-2 rounded">
                              <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="radio" name="stockType" value="load" checked onchange="renderAdminStockTable()">
+                                <input type="radio" name="stockType" value="load" checked onchange="updateAdminStockForm(); renderAdminStockTable()">
                                 <span class="text-sm font-bold text-blue-700">Loading (Export)</span>
                             </label>
                             <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="radio" name="stockType" value="discharge" onchange="renderAdminStockTable()">
+                                <input type="radio" name="stockType" value="discharge" onchange="updateAdminStockForm(); renderAdminStockTable()">
                                 <span class="text-sm font-bold text-pink-600">Discharge (Import)</span>
                             </label>
                         </div>
 
-                        <div class="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4 bg-gray-100 p-3 rounded border">
+                        <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mb-4 bg-gray-100 p-3 rounded border">
                             <input type="text" id="addModel" class="input-light col-span-1" placeholder="Model">
-                            <input type="text" id="addPort" class="input-light col-span-1" placeholder="Port (Dest/Origin)">
-                            <input type="text" id="addLane" class="input-light col-span-1" placeholder="Lane/Yard">
+                            <input type="text" id="addPort" class="input-light col-span-1" placeholder="Port 1 (Disch/Load)">
+                            <input type="text" id="addPort2" class="input-light col-span-1" placeholder="Port 2 (Final/Disch)">
+                            <input type="text" id="addLane" class="input-light col-span-1" placeholder="Block/Deck">
                             <input type="number" id="addPlan" class="input-light col-span-1" placeholder="Qty">
                             <button onclick="addStockItem()" class="bg-green-600 text-white font-bold rounded shadow col-span-1">Add</button>
                         </div>
                         <div class="overflow-x-auto border rounded-lg h-80 overflow-y-auto">
                             <table class="w-full text-left text-sm text-gray-800">
                                 <thead class="bg-gray-200 text-xs uppercase sticky top-0">
-                                    <tr><th class="p-3">Type</th><th class="p-3">Model</th><th class="p-3">Port</th><th class="p-3 text-right">Plan</th><th class="p-3 text-center">Action</th></tr>
+                                    <tr>
+                                        <th class="p-3">Type</th>
+                                        <th class="p-3">Model</th>
+                                        <th class="p-3">Port 1</th>
+                                        <th class="p-3">Port 2</th>
+                                        <th class="p-3 text-right">Plan</th>
+                                        <th class="p-3 text-center">Action</th>
+                                    </tr>
                                 </thead>
                                 <tbody id="adminStockBody" class="divide-y divide-gray-200"></tbody>
                             </table>
                         </div>
                     </div>
 
-                    <div class="bg-white p-6 rounded-xl text-black shadow-lg shadow-slate-900/50 h-fit">
-                         <h3 class="text-lg font-bold mb-4 text-purple-800 border-b pb-2"><i class="fa-solid fa-users-gear mr-2"></i>3. Manage Gangs</h3>
-                         <div class="flex gap-2 mb-4">
-                            <input type="text" id="newGangName" class="input-light" placeholder="New Gang Name">
-                            <button onclick="addNewGang()" class="bg-purple-600 text-white font-bold px-4 rounded shadow"><i class="fa-solid fa-plus"></i></button>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="bg-white p-6 rounded-xl text-black shadow-lg shadow-slate-900/50 h-fit">
+                             <h3 class="text-lg font-bold mb-4 text-purple-800 border-b pb-2"><i class="fa-solid fa-users-gear mr-2"></i>3. Manage Gangs</h3>
+                             <div class="flex gap-2 mb-4">
+                                <input type="text" id="newGangName" class="input-light" placeholder="New Gang Name">
+                                <button onclick="addNewGang()" class="bg-purple-600 text-white font-bold px-4 rounded shadow"><i class="fa-solid fa-plus"></i></button>
+                            </div>
+                            <div class="text-[10px] text-gray-500 mb-2">
+                                <i class="fa-solid fa-circle-info mr-1"></i> Use toggle to enable/disable gangs for operation.
+                            </div>
+                            <ul id="adminGangList" class="space-y-1 max-h-48 overflow-y-auto"></ul>
                         </div>
-                        <ul id="adminGangList" class="space-y-1 max-h-48 overflow-y-auto"></ul>
+
+                        <!-- Admin Security Section -->
+                        <div class="bg-slate-700 p-6 rounded-xl text-white shadow-lg h-fit border border-slate-600">
+                            <h3 class="text-lg font-bold mb-4 text-yellow-400 border-b border-slate-500 pb-2"><i class="fa-solid fa-shield-halved mr-2"></i>Admin Security</h3>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-300 mb-1">Change Username</label>
+                                    <input type="text" id="changeAdminUser" class="bg-slate-800 border border-slate-500 text-white text-sm rounded-lg block w-full p-2">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-300 mb-1">Change Password</label>
+                                    <input type="password" id="changeAdminPass" class="bg-slate-800 border border-slate-500 text-white text-sm rounded-lg block w-full p-2" placeholder="New Password">
+                                </div>
+                                <button onclick="saveAdminConfig()" class="w-full bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-2 rounded shadow mt-2">Update Credentials</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -341,6 +387,34 @@
     </footer>
 
     <!-- MODALS -->
+    <!-- Admin Login Modal -->
+    <div id="adminLoginModal" class="hidden fixed inset-0 z-[200] flex items-center justify-center modal-backdrop fade-in p-4">
+        <div class="bg-slate-800 border border-slate-600 rounded-xl shadow-2xl w-full max-w-sm overflow-hidden p-6">
+            <div class="text-center mb-6">
+                <div class="bg-slate-700 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-slate-500">
+                    <i class="fa-solid fa-user-shield text-3xl text-blue-400"></i>
+                </div>
+                <h3 class="text-xl font-bold text-white">Admin Login</h3>
+                <p class="text-slate-400 text-xs mt-1">Restricted Access</p>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 mb-1">Username</label>
+                    <input type="text" id="adminLoginUser" class="bg-slate-900 border border-slate-600 text-white text-sm rounded-lg block w-full p-2.5 focus:border-blue-500 outline-none" placeholder="Enter username">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 mb-1">Password</label>
+                    <input type="password" id="adminLoginPass" class="bg-slate-900 border border-slate-600 text-white text-sm rounded-lg block w-full p-2.5 focus:border-blue-500 outline-none" placeholder="Enter password" onkeypress="if(event.key==='Enter') attemptAdminLogin()">
+                </div>
+                <div id="loginErrorMsg" class="text-red-500 text-xs text-center hidden">Invalid credentials</div>
+                <div class="grid grid-cols-2 gap-3 mt-4">
+                    <button onclick="closeAdminLogin()" class="bg-slate-700 hover:bg-slate-600 text-white py-2 rounded font-bold text-sm">Cancel</button>
+                    <button onclick="attemptAdminLogin()" class="bg-blue-600 hover:bg-blue-500 text-white py-2 rounded font-bold text-sm shadow-lg shadow-blue-500/20">Login</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="editStockModal" class="hidden fixed inset-0 z-[150] flex items-center justify-center modal-backdrop fade-in p-4">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm text-black overflow-hidden">
             <div class="bg-blue-600 p-4 border-b border-blue-500 flex justify-between items-center text-white">
@@ -349,8 +423,9 @@
             </div>
             <div class="p-6 space-y-4">
                 <div><label class="block text-xs font-bold text-gray-500 mb-1">Model Name</label><input type="text" id="editStockModel" class="input-light"></div>
-                <div><label class="block text-xs font-bold text-gray-500 mb-1">Port</label><input type="text" id="editStockPort" class="input-light"></div>
-                <div><label class="block text-xs font-bold text-gray-500 mb-1">Lane / Yard</label><input type="text" id="editStockLane" class="input-light"></div>
+                <div><label class="block text-xs font-bold text-gray-500 mb-1" id="lblEditPort1">Port 1</label><input type="text" id="editStockPort" class="input-light"></div>
+                <div><label class="block text-xs font-bold text-gray-500 mb-1" id="lblEditPort2">Port 2</label><input type="text" id="editStockPort2" class="input-light"></div>
+                <div><label class="block text-xs font-bold text-gray-500 mb-1" id="lblEditLane">Lane / Yard</label><input type="text" id="editStockLane" class="input-light"></div>
                 <div><label class="block text-xs font-bold text-gray-500 mb-1">Plan Qty</label><input type="number" id="editStockPlan" class="input-light"></div>
                 <input type="hidden" id="editStockVId">
                 <input type="hidden" id="editStockSId">
@@ -432,11 +507,12 @@
             appId: "1:38927482392:web:123abc456def"
         };
 
-        window.appData = { vessels: [], gangs: ["Gang 1", "Gang 2", "Gang 3", "Gang 4"], breaks: [], portColors: { "JAPAN": "#22c55e", "IND": "#f97316", "USA": "#3b82f6" } };
+        window.appData = { vessels: [], gangs: ["Gang 1", "Gang 2", "Gang 3", "Gang 4"], disabledGangs: [], breaks: [], portColors: { "JAPAN": "#22c55e", "IND": "#f97316", "USA": "#3b82f6" }, adminAuth: {user: "admin", pass: "999999999"} };
         window.currentView = 'overview';
         window.activeVesselId = null;
         window.user = null;
         window.currentOpMode = 'load';
+        window.isAdminLoggedIn = false;
 
         let app, auth, db;
 
@@ -449,8 +525,16 @@
             document.getElementById('editStockSId').value = sId;
             document.getElementById('editStockModel').value = s.model;
             document.getElementById('editStockPort').value = s.port || '';
+            document.getElementById('editStockPort2').value = s.port2 || '';
             document.getElementById('editStockLane').value = s.lane || '';
             document.getElementById('editStockPlan').value = s.plan;
+            
+            // Adjust Labels
+            const isLoad = s.type === 'load';
+            document.getElementById('lblEditPort1').innerText = isLoad ? 'Port of Discharge' : 'Port Load (Origin)';
+            document.getElementById('lblEditPort2').innerText = isLoad ? 'Final Port Discharge' : 'Port Discharge (Dest)';
+            document.getElementById('lblEditLane').innerText = isLoad ? 'Block' : 'Deck';
+
             document.getElementById('editStockModal').classList.remove('hidden');
         }
         window.closeEditStockModal = function() { document.getElementById('editStockModal').classList.add('hidden'); }
@@ -461,12 +545,101 @@
             const s = (v.stocks || []).find(x => x.id === sId); if(!s) return;
             const newModel = document.getElementById('editStockModel').value;
             const newPort = document.getElementById('editStockPort').value.trim();
+            const newPort2 = document.getElementById('editStockPort2').value.trim();
             const newLane = document.getElementById('editStockLane').value;
             const newPlan = parseInt(document.getElementById('editStockPlan').value);
             if(!newModel || !newPlan) { window.showAlert("Model and Plan are required!"); return; }
-            s.model = newModel; s.port = newPort; s.lane = newLane; s.plan = newPlan;
+            s.model = newModel; s.port = newPort; s.port2 = newPort2; s.lane = newLane; s.plan = newPlan;
             window.saveData(); window.renderAdminStockTable(); window.closeEditStockModal();
         }
+
+        // --- EXCEL UPLOAD LOGIC START ---
+        window.handleExcelUpload = function() {
+            const fileInput = document.getElementById('excelUpload');
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            if (!window.activeVesselId) {
+                window.showAlert("Please select a vessel first!");
+                fileInput.value = ''; // reset
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                
+                const vessel = window.appData.vessels.find(x => x.id === window.activeVesselId);
+                if(!vessel.stocks) vessel.stocks = [];
+                let addedCount = 0;
+
+                // Process LOAD Sheet
+                if(workbook.Sheets['LOAD']) {
+                    const sheet = workbook.Sheets['LOAD'];
+                    const json = XLSX.utils.sheet_to_json(sheet);
+                    json.forEach(row => {
+                        // Mapping: Port of Discharge, Final port discharge, Model, Unit, Block
+                        const model = row['Model'];
+                        const qty = row['Unit'];
+                        if(!model || !qty) return;
+
+                        const port = row['Port of Discharge'] || '';
+                        const finalPort = row['Final port discharge'] || '';
+                        const lane = row['Block'] || '';
+                        
+                        vessel.stocks.push({
+                            id: Date.now() + Math.random(),
+                            type: 'load',
+                            model: model.toString(),
+                            port: port.toString(),
+                            port2: finalPort.toString(), // Final Port
+                            lane: lane.toString(),
+                            plan: parseInt(qty) || 0,
+                            loadedMap: {}
+                        });
+                        addedCount++;
+                    });
+                }
+
+                // Process DISCHARGE Sheet
+                if(workbook.Sheets['DISCHARGE']) {
+                    const sheet = workbook.Sheets['DISCHARGE'];
+                    const json = XLSX.utils.sheet_to_json(sheet);
+                    json.forEach(row => {
+                        // Mapping: Port load, Port Discharge, Model, Unit, Deck
+                        const model = row['Model'];
+                        const qty = row['Unit'];
+                        if(!model || !qty) return;
+
+                        const portLoad = row['Port load'] || ''; // Origin
+                        const portDisch = row['Port Discharge'] || ''; // Destination
+                        const lane = row['Deck'] || '';
+
+                        vessel.stocks.push({
+                            id: Date.now() + Math.random(),
+                            type: 'discharge',
+                            model: model.toString(),
+                            port: portLoad.toString(), // Port Load (Origin) is primary for grouping? Or use Disch? Let's use Load as primary per old logic, or switch.
+                            // User request: Port load, Port Discharge... 
+                            // Let's store Port Load in 'port' and Port Discharge in 'port2'
+                            port2: portDisch.toString(),
+                            lane: lane.toString(),
+                            plan: parseInt(qty) || 0,
+                            loadedMap: {}
+                        });
+                        addedCount++;
+                    });
+                }
+
+                window.saveData();
+                window.renderAdminStockTable();
+                window.showAlert(`Import Successful! Added ${addedCount} items.`);
+                fileInput.value = '';
+            };
+            reader.readAsArrayBuffer(file);
+        }
+        // --- EXCEL UPLOAD LOGIC END ---
 
         window.getGangData = function(v, gangName) {
             if (!v.gangPeriods || !v.gangPeriods[gangName]) return { status: 'working', periods: v.periods || [] };
@@ -744,6 +917,71 @@
             window.saveData();
         }
 
+        window.renderVesselDetail = function() {
+            if (document.activeElement.tagName === 'INPUT') { window.updateLiveTime(); return; }
+            const v = window.appData.vessels.find(x => x.id === window.activeVesselId); if(!v) return window.goToOverview();
+            document.getElementById('detailVesselName').innerText = v.name; document.getElementById('detailVesselVoy').innerText = v.voy; document.getElementById('detailStartTime').innerText = v.startTime;
+            const isLoad = window.currentOpMode === 'load';
+            document.getElementById('tabLoad').className = isLoad ? "flex-1 py-3 rounded-lg font-bold text-sm uppercase transition border-b-4 bg-green-500 text-white border-green-700 shadow-lg shadow-green-500/40 transform scale-105" : "flex-1 py-3 rounded-lg font-bold text-sm uppercase transition border-b-4 bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 opacity-70 hover:opacity-100";
+            document.getElementById('tabDischarge').className = !isLoad ? "flex-1 py-3 rounded-lg font-bold text-sm uppercase transition border-b-4 bg-red-600 text-white border-red-800 shadow-lg shadow-red-600/40 transform scale-105" : "flex-1 py-3 rounded-lg font-bold text-sm uppercase transition border-b-4 bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 opacity-70 hover:opacity-100";
+            
+            // Adjust Columns based on Mode
+            document.getElementById('colPortHeader1').innerText = isLoad ? 'Port Disch' : 'Port Load';
+            document.getElementById('colPortHeader2').innerText = isLoad ? 'Final Port' : 'Port Disch';
+            document.getElementById('colLaneHeader').innerText = isLoad ? 'Block' : 'Deck';
+
+            const s = calculateVesselStats(v, window.currentOpMode);
+            document.getElementById('detailTotal').innerText = s.plan; document.getElementById('detailLoaded').innerText = s.loaded; document.getElementById('detailRemaining').innerText = s.remaining;
+            document.getElementById('lblLoaded').innerText = isLoad ? "Loaded" : "Discharged";
+            const statCard = document.getElementById('statLoadedCard'); statCard.className = isLoad ? "glass-panel p-3 rounded-xl text-center border-t-4 border-green-500 cursor-pointer hover:bg-slate-700/50 transition active:scale-95" : "glass-panel p-3 rounded-xl text-center border-t-4 border-red-500 cursor-pointer hover:bg-slate-700/50 transition active:scale-95"; 
+            document.getElementById('detailLoaded').className = isLoad ? "text-2xl font-bold text-green-400" : "text-2xl font-bold text-red-500"; 
+            const pct = s.plan > 0 ? Math.round((s.loaded / s.plan) * 100) : 0; const visualPct = Math.max(0, Math.min(100, pct)); const barGradient = isLoad ? "from-green-600 to-green-400" : "from-red-600 to-red-400"; const shipBadgeColor = isLoad ? "bg-green-600 border-green-400" : "bg-red-600 border-red-400";
+            document.getElementById('detailShipProgress').innerHTML = `<div class="bg-slate-800 rounded-xl overflow-hidden shadow-lg border border-slate-700 p-5 relative"><div class="relative w-full h-2 bg-slate-700 rounded-full"><div class="absolute top-0 left-0 h-full bg-gradient-to-r ${barGradient} rounded-full transition-all duration-1000" style="width: ${visualPct}%"></div><div class="absolute top-1/2 -translate-y-1/2 transition-all duration-1000 z-10 flex flex-col items-center" style="left: ${visualPct}%; transform: translate(-50%, -50%);"><div class="${shipBadgeColor} text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg mb-1 whitespace-nowrap border">${pct}%</div><i class="fa-solid fa-ferry text-2xl text-white drop-shadow-md" style="text-shadow: 0 4px 6px rgba(0,0,0,0.5);"></i></div></div></div>`;
+            window.updateLiveTime(); 
+            const sel = document.getElementById('currentGangSelect'); const statusDisp = document.getElementById('gangStatusDisplay');
+            const activeGangs = window.appData.gangs.filter(g => !(window.appData.disabledGangs || []).includes(g));
+            const currentVal = sel.value; sel.innerHTML = '<option value="" disabled selected>-- Select Gang --</option>';
+            activeGangs.forEach(g => { const o = document.createElement('option'); o.value = g; o.innerText = g; o.style.color = getGangColor(g); o.style.fontWeight = "bold"; o.style.backgroundColor = "#1e293b"; sel.appendChild(o); });
+            if (currentVal && activeGangs.includes(currentVal)) sel.value = currentVal; else sel.value = "";
+            if(sel.value) { const gColor = getGangColor(sel.value); sel.style.color = gColor; sel.style.borderColor = gColor; sel.style.boxShadow = `0 0 10px ${gColor}40`; const gd = window.getGangData(v, sel.value); statusDisp.classList.remove('hidden'); if(gd.status === 'break') { statusDisp.innerHTML = `<i class="fa-solid fa-mug-hot mr-1"></i> ${sel.value} is on <b>BREAK</b>`; statusDisp.className = "mt-2 text-center text-xs text-red-300 bg-red-900/30 border border-red-800 p-2 rounded animate-pulse"; } else { statusDisp.innerHTML = `<i class="fa-solid fa-bolt mr-1"></i> ${sel.value} is <b>WORKING</b>`; statusDisp.className = "mt-2 text-center text-xs text-green-300 bg-green-900/30 border border-green-800 p-2 rounded"; } } else { sel.style.color = "white"; sel.style.borderColor = "rgb(59 130 246)"; sel.style.boxShadow = "none"; statusDisp.classList.add('hidden'); }
+            const tb = document.getElementById('detailTableBody'); if(tb) tb.innerHTML = ''; const curG = sel ? sel.value : ""; const portStats = {};
+            let displayStocks = (v.stocks || []).filter(st => { const itemType = st.type || 'load'; return itemType === window.currentOpMode; });
+            displayStocks.sort((a, b) => { const portA = (a.port || "ZZZZ").toUpperCase(); const portB = (b.port || "ZZZZ").toUpperCase(); if (portA < portB) return -1; if (portA > portB) return 1; if (a.model < b.model) return -1; if (a.model > b.model) return 1; if ((a.lane||"") < (b.lane||"")) return -1; if ((a.lane||"") > (b.lane||"")) return 1; return 0; });
+            displayStocks.forEach(st => {
+                const l = Object.values(st.loadedMap||{}).reduce((a,b)=>a+b,0); const rem = st.plan - l; const myL = (curG && st.loadedMap && st.loadedMap[curG]) || 0;
+                const pColor = getPortColor(st.port); const pName = st.port ? st.port.trim().toUpperCase() : "UNKNOWN";
+                if(!portStats[pName]) portStats[pName] = { plan: 0, loaded: 0 }; portStats[pName].plan += st.plan; portStats[pName].loaded += l;
+                const btnColor = isLoad ? 'bg-green-600 hover:bg-green-500 shadow-green-500/30' : 'bg-red-600 hover:bg-red-500 shadow-red-500/30';
+                tb.innerHTML += `<tr class="${rem===0?'bg-green-900/10':''}" style="border-left: 4px solid ${pColor}"><td class="p-3 text-xs font-bold uppercase min-w-[100px]" style="color: ${pColor}">${st.port || '-'}</td><td class="p-3 text-xs font-bold text-gray-400 min-w-[100px]">${st.port2 || '-'}</td><td class="p-3 font-bold text-white min-w-[70px]">${st.model}</td><td class="p-3 text-blue-300 font-mono text-xs min-w-[70px]">${st.lane}</td><td class="p-3 text-center bg-slate-800/30 border-x border-slate-700 min-w-[140px]">${rem > 0 || l > 0 ? `<div class="flex gap-1 justify-center items-center"><button onclick="submitLoad(${v.id},${st.id}, -1)" class="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-l text-sm shadow-lg transform active:scale-95 transition"><i class="fa-solid fa-minus"></i></button><input type="number" id="inp_load_${st.id}" class="w-16 bg-slate-700 text-white text-center border-y border-slate-500 py-1.5 text-base font-bold shadow-inner" placeholder="#" onkeypress="if(event.key==='Enter') submitLoad(${v.id}, ${st.id})"><button onclick="submitLoad(${v.id},${st.id}, 1)" class="${btnColor} text-white px-3 py-1.5 rounded-r text-sm shadow-lg transform active:scale-95 transition"><i class="fa-solid fa-plus"></i></button></div>` : '<span class="text-green-500 text-xs font-bold"><i class="fa-solid fa-check mr-1"></i>DONE</span>'}</td><td class="p-3 text-center">${st.plan}</td><td class="p-3 text-center font-bold text-white bg-slate-700/20">${l}</td><td class="p-3 text-center text-blue-400 border-l border-slate-600">${myL||'-'}</td><td class="p-3 text-center ${rem===0?'text-green-500':'text-orange-400'}">${rem}</td></tr>`;
+            });
+            const gg = document.getElementById('detailGangGrid'); if(gg) {
+                gg.innerHTML = ''; const gangStats = {}; let shipStats = { qty: 0, startTime: Infinity, endTime: 0 };
+                const currentLogs = (v.logs||[]).filter(l => (l.type || 'load') === window.currentOpMode);
+                currentLogs.forEach(l => { if (!gangStats[l.gang]) gangStats[l.gang] = { qty: 0, startTime: Infinity, endTime: 0 }; gangStats[l.gang].qty += l.qty; if (l.timestamp < gangStats[l.gang].startTime) gangStats[l.gang].startTime = l.timestamp; if (l.timestamp > gangStats[l.gang].endTime) gangStats[l.gang].endTime = l.timestamp; shipStats.qty += l.qty; if (l.timestamp < shipStats.startTime) shipStats.startTime = l.timestamp; if (l.timestamp > shipStats.endTime) shipStats.endTime = l.timestamp; });
+                const calculateRate = (qty, startTime) => { if (!qty || startTime === Infinity) return 0; let durationMs = Date.now() - startTime; if (durationMs < 1000 * 60 * 10) durationMs = 1000 * 60 * 10; const hours = durationMs / (1000 * 60 * 60); return Math.round(qty / hours); };
+                const shipRate = calculateRate(shipStats.qty, shipStats.startTime);
+                const perfHeader = gg.parentElement.querySelector('.flex.justify-between');
+                if(perfHeader) { let rateDisplay = document.getElementById('shipRateDisplay'); if(!rateDisplay) { rateDisplay = document.createElement('div'); rateDisplay.id = 'shipRateDisplay'; rateDisplay.className = "text-right bg-slate-800/50 px-3 py-1 rounded border border-slate-600 ml-auto mr-2"; perfHeader.insertBefore(rateDisplay, perfHeader.lastElementChild); } rateDisplay.innerHTML = `<div class="text-[10px] text-slate-400 uppercase font-bold text-center">SHIP PRODUCT</div><div class="text-lg font-bold text-yellow-400 leading-none text-center">${shipRate} <span class="text-[10px] text-slate-500">U/Hr</span></div>`; }
+                activeGangs.forEach(g => { const gColor = getGangColor(g); const isSelected = g === curG; const s = gangStats[g] || { qty: 0, startTime: Infinity }; const rate = calculateRate(s.qty, s.startTime); const gd = window.getGangData(v, g); const isBreak = gd.status === 'break'; const statusDot = isBreak ? `<span class="absolute top-1 right-1 w-3 h-3 rounded-full bg-red-500 shadow-sm border border-white/20"></span>` : `<span class="absolute top-1 right-1 w-3 h-3 rounded-full bg-green-500 shadow-sm border border-white/20 pulse-active"></span>`; const style = isSelected ? `background-color: ${gColor}; border-color: ${gColor}; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5);` : `border-color: ${gColor}; color: ${gColor}; background-color: rgba(0,0,0,0.2);`; gg.innerHTML += `<div onclick="window.showGangDetail('${window.escapeStr(g)}')" class="relative p-2 rounded text-center border-2 cursor-pointer transition transform hover:scale-105 active:scale-95 shadow-md flex flex-col justify-between min-h-[90px] ${isBreak?'opacity-70 grayscale-[0.5]':''}" style="${style}">${statusDot}<div class="text-[10px] uppercase truncate font-bold opacity-90 pr-2 border-b border-white/10 pb-1 mb-1">${g}</div><div class="flex-grow flex flex-col justify-center"><div class="text-2xl font-bold leading-none">${s.qty}</div><div class="text-[10px] font-mono mt-1 opacity-90 bg-black/20 rounded px-1"><i class="fa-solid fa-gauge-high mr-1"></i>${rate}/hr</div></div></div>`; });
+            }
+            const portDiv = document.getElementById('detailPortSummary');
+            if(portDiv) {
+                document.getElementById('lblPortSummary').innerText = isLoad ? "Destination Port Summary" : "Origin Port Summary";
+                let pHtml = ''; const sortedPorts = Object.keys(portStats).sort();
+                if (sortedPorts.length === 0) pHtml = '<div class="col-span-full text-center text-slate-500 italic py-4">No data for this mode</div>';
+                else { sortedPorts.forEach(p => { const s = portStats[p]; const pct = s.plan > 0 ? Math.round((s.loaded / s.plan) * 100) : 0; const pColor = getPortColor(p); pHtml += `<div onclick="showPortGangDetails('${window.escapeStr(p)}')" class="bg-slate-700/50 p-3 rounded border border-slate-600 shadow-sm cursor-pointer hover:bg-slate-600 transition active:scale-95 group" style="border-left: 4px solid ${pColor}"><div class="flex justify-between items-center mb-2"><div class="font-bold flex items-center gap-2 group-hover:opacity-80 transition" style="color: ${pColor}"><span class="w-2 h-2 rounded-full border border-white/10" style="background-color: ${pColor}"></span>${p}</div><div class="text-xs font-mono text-blue-200 bg-blue-900/50 px-2 py-0.5 rounded">${s.loaded} / ${s.plan}</div></div><div class="w-full bg-slate-800 rounded-full h-2 mb-1"><div class="h-2 rounded-full transition-all duration-500" style="background-color: ${pColor}; width: ${pct}%"></div></div><div class="text-right text-[10px] text-slate-400">${pct}% Done</div></div>`; }); }
+                portDiv.innerHTML = pHtml;
+            }
+            const hl = document.getElementById('detailHistoryBody'); if(hl) {
+                hl.innerHTML = ''; (v.logs||[]).filter(l => (l.type || 'load') === window.currentOpMode).slice(0,20).forEach(log => {
+                    const t = new Date(log.timestamp).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}); const gColor = getGangColor(log.gang);
+                    let p = log.port; if(!p) { const stk = (v.stocks||[]).find(s=>s.id === log.stockId); p = stk ? stk.port : '-'; }
+                    const pColor = getPortColor(p); const qtyColor = log.qty < 0 ? 'text-red-400' : 'text-green-400';
+                    hl.innerHTML += `<tr class="hover:bg-slate-800/50 transition"><td class="p-3 text-xs text-gray-400 font-mono">${t}</td><td class="p-3 text-xs font-bold" style="color: ${gColor}">${log.gang}</td><td class="p-3 text-xs text-white">${log.model}</td><td class="p-3 text-xs font-bold" style="color:${pColor}">${p || '-'}</td><td class="p-3 text-xs text-gray-400 font-mono">${log.lane}</td><td class="p-3 text-right ${qtyColor} font-bold">${log.qty > 0 ? '+' : ''}${log.qty}</td></tr>`;
+                });
+            }
+        };
+
         window.initSystem = async function() {
             try {
                 app = initializeApp(firebaseConfig); auth = getAuth(app); db = getDatabase(app); await signInAnonymously(auth);
@@ -767,12 +1005,85 @@
         }
 
         function showConnectionError(msg) { document.getElementById('loader-spinner').classList.add('hidden'); document.getElementById('loader-error').classList.remove('hidden'); if(msg !== "Configuration Missing or Invalid") document.getElementById('loader-error-msg').innerText = msg; }
-        function validateData() { if(!window.appData.vessels) window.appData.vessels = []; if(!window.appData.gangs) window.appData.gangs = ["Gang 1", "Gang 2", "Gang 3", "Gang 4"]; if(!window.appData.breaks) window.appData.breaks = []; if(!window.appData.portColors) window.appData.portColors = { "JAPAN":"#22c55e", "IND":"#f97316", "USA":"#3b82f6" }; }
+        
+        function validateData() { 
+            if(!window.appData.vessels) window.appData.vessels = []; 
+            if(!window.appData.gangs) window.appData.gangs = ["Gang 1", "Gang 2", "Gang 3", "Gang 4"]; 
+            if(!window.appData.disabledGangs) window.appData.disabledGangs = []; // Ensure disabledGangs exists
+            if(!window.appData.breaks) window.appData.breaks = []; 
+            if(!window.appData.portColors) window.appData.portColors = { "JAPAN":"#22c55e", "IND":"#f97316", "USA":"#3b82f6" }; 
+            if(!window.appData.adminAuth) window.appData.adminAuth = { user: "admin", pass: "999999999" };
+        }
+        
         window.saveData = async function() { if (window.user && db) { try { await set(ref(db, 'roro_v1/master'), window.appData); } catch (e) { console.error("Save Error", e); window.showAlert("Save Failed: " + e.message); } } else { window.showAlert("Offline! Data not saved."); } };
+        
         window.goToOverview = function() { window.currentView = 'overview'; window.activeVesselId = null; window.render(); }
         window.goToDetail = function(vId) { window.currentView = 'detail'; window.activeVesselId = vId; window.render(); }
-        window.goToAdmin = function() { window.currentView = 'admin'; window.render(); }
+        
+        window.goToAdmin = function() { 
+            if(window.isAdminLoggedIn) {
+                window.currentView = 'admin'; 
+                window.render(); 
+            } else {
+                // Show login modal
+                document.getElementById('adminLoginModal').classList.remove('hidden');
+                document.getElementById('adminLoginPass').value = '';
+                document.getElementById('loginErrorMsg').classList.add('hidden');
+            }
+        }
+
+        window.closeAdminLogin = function() {
+            document.getElementById('adminLoginModal').classList.add('hidden');
+        }
+
+        window.attemptAdminLogin = function() {
+            const u = document.getElementById('adminLoginUser').value;
+            const p = document.getElementById('adminLoginPass').value;
+            const auth = window.appData.adminAuth;
+            
+            if (u === auth.user && p === auth.pass) {
+                window.isAdminLoggedIn = true;
+                document.getElementById('adminLoginModal').classList.add('hidden');
+                window.goToAdmin();
+            } else {
+                document.getElementById('loginErrorMsg').classList.remove('hidden');
+            }
+        }
+
+        window.logoutAdmin = function() {
+            window.isAdminLoggedIn = false;
+            window.goToOverview();
+        }
+
+        window.saveAdminConfig = function() {
+            const u = document.getElementById('changeAdminUser').value;
+            const p = document.getElementById('changeAdminPass').value;
+            
+            if (u && p) {
+                if(confirm("Are you sure you want to update admin credentials?")) {
+                    window.appData.adminAuth.user = u;
+                    window.appData.adminAuth.pass = p;
+                    window.saveData();
+                    alert("Credentials updated successfully.");
+                    document.getElementById('changeAdminUser').value = '';
+                    document.getElementById('changeAdminPass').value = '';
+                }
+            } else {
+                alert("Please enter both username and password.");
+            }
+        }
+
         window.switchOpMode = function(mode) { window.currentOpMode = mode; window.renderVesselDetail(); }
+
+        window.updateAdminStockForm = function() {
+            const radios = document.getElementsByName('stockType'); 
+            let type = 'load';
+            for (let i = 0; i < radios.length; i++) { if (radios[i].checked) type = radios[i].value; }
+            const isLoad = type === 'load';
+            document.getElementById('addPort').placeholder = isLoad ? "Port of Discharge" : "Port Load (Origin)";
+            document.getElementById('addPort2').placeholder = isLoad ? "Final port discharge" : "Port Discharge";
+            document.getElementById('addLane').placeholder = isLoad ? "Block" : "Deck";
+        }
 
         window.render = function() {
             if (document.activeElement.tagName === 'INPUT') return;
@@ -782,7 +1093,7 @@
             btnAdmin.className = "px-4 py-2 rounded text-sm font-bold transition " + (window.currentView === 'admin' ? "bg-blue-600 text-white shadow-lg" : "bg-slate-700 text-slate-300 hover:text-white");
             if (window.currentView === 'overview') { document.getElementById('view-overview').classList.remove('hidden'); renderOverview(); } 
             else if (window.currentView === 'detail') { document.getElementById('view-detail').classList.remove('hidden'); window.renderVesselDetail(); } 
-            else if (window.currentView === 'admin') { document.getElementById('view-admin').classList.remove('hidden'); window.renderAdmin(); }
+            else if (window.currentView === 'admin') { document.getElementById('view-admin').classList.remove('hidden'); window.renderAdmin(); window.updateAdminStockForm(); }
         }
         
         window.updateLiveTime = function() {
@@ -802,11 +1113,18 @@
         window.deleteVessel = function(id) { if(confirm("Delete this vessel?")) { window.appData.vessels = window.appData.vessels.filter(v => v.id !== id); if (window.activeVesselId === id) window.activeVesselId = null; window.saveData(); } }
         window.addStockItem = function() {
             if (!window.activeVesselId) { window.showAlert("Please select a vessel."); return; }
-            const v = window.appData.vessels.find(x => x.id === window.activeVesselId); const m = document.getElementById('addModel').value; const pt = document.getElementById('addPort').value.trim(); const l = document.getElementById('addLane').value; const p = parseInt(document.getElementById('addPlan').value); const radios = document.getElementsByName('stockType'); let type = 'load';
+            const v = window.appData.vessels.find(x => x.id === window.activeVesselId); 
+            const m = document.getElementById('addModel').value; 
+            const pt = document.getElementById('addPort').value.trim(); 
+            const pt2 = document.getElementById('addPort2').value.trim(); 
+            const l = document.getElementById('addLane').value; 
+            const p = parseInt(document.getElementById('addPlan').value); 
+            const radios = document.getElementsByName('stockType'); let type = 'load';
             for (let i = 0; i < radios.length; i++) { if (radios[i].checked) type = radios[i].value; }
             if(!m || !l || !p) { window.showAlert("Missing fields"); return; }
-            if (!v.stocks) v.stocks = []; v.stocks.push({ id: Date.now(), type: type, model: m, port: pt, lane: l, plan: p, loadedMap: {} });
-            document.getElementById('addModel').value = ''; document.getElementById('addLane').value = ''; document.getElementById('addPlan').value = ''; document.getElementById('addPort').value = '';
+            if (!v.stocks) v.stocks = []; 
+            v.stocks.push({ id: Date.now(), type: type, model: m, port: pt, port2: pt2, lane: l, plan: p, loadedMap: {} });
+            document.getElementById('addModel').value = ''; document.getElementById('addLane').value = ''; document.getElementById('addPlan').value = ''; document.getElementById('addPort').value = ''; document.getElementById('addPort2').value = '';
             window.saveData(); window.renderAdminStockTable();
         }
         window.deleteStock = function(vId, sId) { const v = window.appData.vessels.find(x => x.id === vId); if(v) { v.stocks = (v.stocks || []).filter(s => s.id !== sId); window.saveData(); window.renderAdminStockTable(); } }
@@ -829,6 +1147,19 @@
 
         window.addNewGang = function() { const n = document.getElementById('newGangName').value.trim(); if(n&&!window.appData.gangs.includes(n)){window.appData.gangs.push(n); document.getElementById('newGangName').value=''; window.saveData();} }
         window.deleteGang = function(n) { if(confirm("Del?")) { window.appData.gangs = window.appData.gangs.filter(g=>g!==n); window.saveData(); } }
+        
+        window.toggleGang = function(name) {
+            if (!window.appData.disabledGangs) window.appData.disabledGangs = [];
+            const idx = window.appData.disabledGangs.indexOf(name);
+            if (idx === -1) {
+                window.appData.disabledGangs.push(name);
+            } else {
+                window.appData.disabledGangs.splice(idx, 1);
+            }
+            window.saveData();
+            window.renderAdmin();
+        }
+
         window.renameGang = function(o) { const n = prompt("New:", o); if(n&&n!==o){ const i = window.appData.gangs.indexOf(o); window.appData.gangs[i]=n; window.saveData();} }
         window.addBreak = function() { const n=document.getElementById('breakName').value; const s=document.getElementById('breakStart').value; const e=document.getElementById('breakEnd').value; if(!n||!s||!e) return; window.appData.breaks.push({name:n,start:s,end:e}); window.saveData(); }
         window.deleteBreak = function(i) { if(confirm("Del?")) { window.appData.breaks.splice(i,1); window.saveData(); } }
@@ -866,7 +1197,29 @@
             const l = document.getElementById('adminVesselList'); l.innerHTML = ''; window.appData.vessels.forEach(v => l.innerHTML += `<li class="flex justify-between bg-gray-100 p-2 rounded text-sm"><span class="font-bold text-blue-800">${v.name}</span><button onclick="deleteVessel(${v.id})" class="text-red-500"><i class="fa-solid fa-trash-can"></i></button></li>`);
             const s = document.getElementById('adminVesselSelect'); s.innerHTML = '<option value="">-- Select --</option>'; window.appData.vessels.forEach(v => s.innerHTML += `<option value="${v.id}">${v.name}</option>`);
             if(window.activeVesselId) s.value = window.activeVesselId;
-            const gl = document.getElementById('adminGangList'); gl.innerHTML = ''; window.appData.gangs.forEach(g => gl.innerHTML += `<li class="flex justify-between bg-gray-50 p-2 rounded text-sm"><span onclick="renameGang('${window.escapeStr(g)}')" class="cursor-pointer">${g}</span><button onclick="deleteGang('${window.escapeStr(g)}')" class="text-red-400"><i class="fa-solid fa-trash-can"></i></button></li>`);
+            
+            const gl = document.getElementById('adminGangList'); 
+            gl.innerHTML = ''; 
+            window.appData.gangs.forEach(g => {
+                const isDisabled = (window.appData.disabledGangs || []).includes(g);
+                const opacity = isDisabled ? 'opacity-50' : '';
+                const icon = isDisabled ? 'fa-toggle-off' : 'fa-toggle-on';
+                const iconColor = isDisabled ? 'text-gray-400' : 'text-green-500';
+                
+                gl.innerHTML += `
+                <li class="flex justify-between items-center bg-gray-50 p-2 rounded text-sm ${opacity}">
+                    <span onclick="renameGang('${window.escapeStr(g)}')" class="cursor-pointer font-bold ${isDisabled ? 'line-through text-gray-400' : 'text-slate-800'}">${g}</span>
+                    <div class="flex gap-2 items-center">
+                        <button onclick="toggleGang('${window.escapeStr(g)}')" class="text-2xl ${iconColor} hover:scale-110 transition">
+                            <i class="fa-solid ${icon}"></i>
+                        </button>
+                        <button onclick="deleteGang('${window.escapeStr(g)}')" class="text-red-400 ml-2 hover:text-red-600">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                </li>`;
+            });
+
             const bl = document.getElementById('adminBreakList'); bl.innerHTML = ''; window.appData.breaks.forEach((b,i) => bl.innerHTML += `<li class="flex justify-between bg-orange-50 p-2 rounded text-sm"><span>${b.name}: ${b.start}-${b.end}</span><button onclick="deleteBreak(${i})" class="text-red-400"><i class="fa-solid fa-trash-can"></i></button></li>`);
             const pcl = document.getElementById('adminPortColorList'); pcl.innerHTML = ''; 
             if(window.appData.portColors) {
@@ -886,10 +1239,13 @@
         window.renderAdminStockTable = function() {
             const b = document.getElementById('adminStockBody'); b.innerHTML = ''; const vId = parseInt(document.getElementById('adminVesselSelect').value);
             if(!vId) return; window.activeVesselId = vId; const v = window.appData.vessels.find(x => x.id === vId);
-            if(v) { (v.stocks || []).forEach(s => {
+            const radios = document.getElementsByName('stockType'); let type = 'load';
+            for (let i = 0; i < radios.length; i++) { if (radios[i].checked) type = radios[i].value; }
+            
+            if(v) { (v.stocks || []).filter(s => s.type === type).forEach(s => {
                 const typeBadge = s.type === 'discharge' ? '<span class="text-pink-600 font-bold">D</span>' : '<span class="text-blue-600 font-bold">L</span>';
                 const pColor = getPortColor(s.port);
-                b.innerHTML += `<tr><td class="p-3">${typeBadge}</td><td class="p-3 font-bold">${s.model}</td><td class="p-3 font-bold" style="color:${pColor}">${s.port||'-'}</td><td class="p-3 text-right">${s.plan}</td><td class="p-3 text-center flex gap-2 justify-center"><button onclick="openEditStock(${v.id},${s.id})" class="text-blue-500 hover:text-blue-700 bg-blue-100 p-1 rounded"><i class="fa-solid fa-pen"></i></button><button onclick="deleteStock(${v.id},${s.id})" class="text-red-500 hover:text-red-700 bg-red-100 p-1 rounded"><i class="fa-solid fa-trash"></i></button></td></tr>`;
+                b.innerHTML += `<tr><td class="p-3">${typeBadge}</td><td class="p-3 font-bold">${s.model}</td><td class="p-3 font-bold" style="color:${pColor}">${s.port||'-'}</td><td class="p-3 font-bold text-gray-500">${s.port2||'-'}</td><td class="p-3 text-right">${s.plan}</td><td class="p-3 text-center flex gap-2 justify-center"><button onclick="openEditStock(${v.id},${s.id})" class="text-blue-500 hover:text-blue-700 bg-blue-100 p-1 rounded"><i class="fa-solid fa-pen"></i></button><button onclick="deleteStock(${v.id},${s.id})" class="text-red-500 hover:text-red-700 bg-red-100 p-1 rounded"><i class="fa-solid fa-trash"></i></button></td></tr>`;
             }); }
         }
 
@@ -916,95 +1272,136 @@
             const g = document.getElementById('vesselGrid'); g.innerHTML = ''; if(window.appData.vessels.length===0) { g.innerHTML='<div class="text-center text-gray-500 col-span-full py-10">No Active Vessels</div>'; return;}
             const sortedVessels = [...window.appData.vessels].sort((a, b) => b.id - a.id);
             sortedVessels.forEach(v => {
-                const s = calculateVesselStats(v); const pct = s.plan > 0 ? Math.round((s.loaded/s.plan)*100) : 0; const visualPct = Math.max(0, Math.min(100, pct));
-                let workingCount = 0; let breakCount = 0; window.appData.gangs.forEach(g => { const gd = window.getGangData(v, g); if (gd.status === 'working') workingCount++; else breakCount++; });
-                let statusBadge = ""; if (s.remaining > 0) { if (workingCount > 0) statusBadge = `<div class="mt-2 flex gap-2 text-[10px] uppercase font-bold"><span class="bg-green-900/40 text-green-400 border border-green-700/50 px-2 py-0.5 rounded flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> Working: ${workingCount}</span>${breakCount > 0 ? `<span class="bg-red-900/40 text-red-400 border border-red-700/50 px-2 py-0.5 rounded flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> Break: ${breakCount}</span>` : ''}</div>`; else statusBadge = `<div class="mt-2 text-[10px] uppercase font-bold"><span class="bg-red-900/40 text-red-400 border border-red-700/50 px-2 py-0.5 rounded flex items-center gap-1 w-fit"><i class="fa-solid fa-mug-hot"></i> ALL BREAK (${breakCount})</span></div>`; }
-                let isComplete = (s.plan > 0 && s.remaining <= 0); let completeHtml = ''; let cardClass = "bg-slate-800 rounded-xl overflow-hidden shadow-lg border border-slate-700 cursor-pointer hover:border-blue-500 transition group relative";
+                const sLoad = calculateVesselStats(v, 'load');
+                const sDischarge = calculateVesselStats(v, 'discharge');
+                
+                const hasLoad = sLoad.plan > 0;
+                const hasDischarge = sDischarge.plan > 0;
+                
+                let workingCount = 0; let breakCount = 0; 
+                
+                const activeGangs = window.appData.gangs.filter(gang => !(window.appData.disabledGangs || []).includes(gang));
+                activeGangs.forEach(g => { const gd = window.getGangData(v, g); if (gd.status === 'working') workingCount++; else breakCount++; });
+                
+                const sTotal = calculateVesselStats(v); 
+                let statusBadge = ""; 
+                if (sTotal.remaining > 0) { 
+                    if (workingCount > 0) statusBadge = `<div class="mt-2 flex gap-2 text-[10px] uppercase font-bold"><span class="bg-green-900/40 text-green-400 border border-green-700/50 px-2 py-0.5 rounded flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> Working: ${workingCount}</span>${breakCount > 0 ? `<span class="bg-red-900/40 text-red-400 border border-red-700/50 px-2 py-0.5 rounded flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> Break: ${breakCount}</span>` : ''}</div>`; 
+                    else statusBadge = `<div class="mt-2 text-[10px] uppercase font-bold"><span class="bg-red-900/40 text-red-400 border border-red-700/50 px-2 py-0.5 rounded flex items-center gap-1 w-fit"><i class="fa-solid fa-mug-hot"></i> ALL BREAK (${breakCount})</span></div>`; 
+                }
+
+                let isComplete = (sTotal.plan > 0 && sTotal.remaining <= 0); 
+                let completeHtml = ''; 
+                let cardClass = "bg-slate-800 rounded-xl overflow-hidden shadow-lg border border-slate-700 cursor-pointer hover:border-blue-500 transition group relative";
+                
                 if (isComplete) {
                     let completeTimeStr = "Unknown"; if (v.logs && v.logs.length > 0) { const lastLog = v.logs[0]; const d = new Date(lastLog.timestamp); completeTimeStr = d.toLocaleDateString('th-TH', {day:'numeric', month:'short'}) + ' ' + d.toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'}); }
                     cardClass = "bg-slate-800 rounded-xl overflow-hidden shadow-lg border-2 border-green-500 cursor-pointer transition group relative";
                     completeHtml = `<div class="absolute inset-0 top-20 bg-slate-900/90 z-20 flex flex-col items-center justify-center text-center backdrop-blur-sm"><h3 class="text-4xl font-bold text-green-400 mb-2 uppercase tracking-widest drop-shadow-md">COMPLETE</h3><div class="text-white text-sm bg-slate-800 px-4 py-1.5 rounded-full border border-green-700/50 shadow-lg"><i class="fa-solid fa-flag-checkered mr-2 text-yellow-400"></i>${completeTimeStr}</div></div>`;
                 }
-                g.innerHTML += `<div onclick="goToDetail(${v.id})" class="${cardClass}">${completeHtml}<div class="p-4 bg-slate-900 border-b border-slate-700 flex justify-between items-start relative z-10"><div><div class="flex items-center gap-2 mb-1"><div class="bg-blue-600 p-1.5 rounded text-white"><i class="fa-solid fa-ship"></i></div><div><h3 class="font-bold text-white text-lg group-hover:text-blue-400 transition leading-tight">${v.name}</h3><div class="text-xs text-slate-400 font-mono">${v.voy}</div></div></div>${statusBadge}</div><div class="text-right"><div class="text-xl font-bold text-white">${s.loaded}<span class="text-sm text-slate-500">/${s.plan}</span></div><div class="text-xs font-mono text-blue-300 mt-1"><i class="fa-solid fa-clock mr-1"></i>${s.etc}</div></div></div><div class="px-5 pt-6 pb-2"><div class="relative w-full h-2 bg-slate-700 rounded-full"><div class="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-600 to-blue-400 rounded-full transition-all duration-1000" style="width: ${visualPct}%"></div><div class="absolute top-1/2 -translate-y-1/2 transition-all duration-1000 z-10 flex flex-col items-center" style="left: ${visualPct}%; transform: translate(-50%, -50%);"><div class="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg mb-1 whitespace-nowrap border border-blue-400">${pct}%</div><i class="fa-solid fa-ferry text-2xl text-white drop-shadow-md"></i></div></div></div><div class="p-4 grid grid-cols-3 gap-2 text-center"><div class="bg-slate-700/30 p-2 rounded border border-slate-700/50"><div class="text-[10px] text-slate-400 uppercase">Plan</div><div class="font-bold text-white">${s.plan}</div></div><div class="bg-green-900/20 p-2 rounded border border-green-900/30"><div class="text-[10px] text-green-400 uppercase">Done</div><div class="font-bold text-green-300">${s.loaded}</div></div><div class="bg-orange-900/20 p-2 rounded border border-orange-900/30"><div class="text-[10px] text-orange-400 uppercase">Rem</div><div class="font-bold text-orange-300">${s.remaining}</div></div></div></div>`;
+
+                let barsHtml = '';
+                const renderBar = (stats, type) => {
+                    const pct = stats.plan > 0 ? Math.round((stats.loaded/stats.plan)*100) : 0; 
+                    const visualPct = Math.max(0, Math.min(100, pct)); 
+                    const isLoad = type === 'load';
+                    const gradient = isLoad ? "from-blue-600 to-blue-400" : "from-pink-600 to-pink-400";
+                    const badgeColor = isLoad ? "bg-blue-600 border-blue-400" : "bg-pink-600 border-pink-400";
+                    const label = isLoad ? "LOADING (Export)" : "DISCHARGE (Import)";
+                    const labelColor = isLoad ? "text-blue-400" : "text-pink-400";
+                    const icon = isLoad ? "fa-upload" : "fa-download";
+
+                    return `
+                    <div class="mb-3 last:mb-0">
+                        <div class="flex justify-between items-end mb-1">
+                            <div class="text-[10px] font-bold ${labelColor} uppercase"><i class="fa-solid ${icon} mr-1"></i>${label}</div>
+                            <div class="text-[10px] text-slate-400 font-mono">${stats.loaded} / ${stats.plan}</div>
+                        </div>
+                        <div class="relative w-full h-2 bg-slate-700 rounded-full">
+                            <div class="absolute top-0 left-0 h-full bg-gradient-to-r ${gradient} rounded-full transition-all duration-1000" style="width: ${visualPct}%"></div>
+                            <div class="absolute top-1/2 -translate-y-1/2 transition-all duration-1000 z-10 flex flex-col items-center" style="left: ${visualPct}%; transform: translate(-50%, -50%);">
+                                <div class="${badgeColor} text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg mb-1 whitespace-nowrap border">${pct}%</div>
+                                <i class="fa-solid fa-ferry text-xl text-white drop-shadow-md" style="text-shadow: 0 2px 4px rgba(0,0,0,0.5);"></i>
+                            </div>
+                        </div>
+                    </div>`;
+                };
+
+                if (hasDischarge) barsHtml += renderBar(sDischarge, 'discharge');
+                if (hasLoad || (!hasDischarge)) barsHtml += renderBar(sLoad, 'load');
+
+                // --- NEW DYNAMIC STATS BLOCK START ---
+                let statsBlockHtml = '<div class="p-4 border-t border-slate-700/50 flex flex-col gap-3">';
+
+                // Helper to render stats grid
+                const renderStatsGrid = (stats, title, colorName) => {
+                    return `
+                    <div>
+                        <div class="text-[10px] text-${colorName}-400 font-bold uppercase mb-1 flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-${colorName}-500"></span> ${title}
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 text-center">
+                            <div class="bg-slate-700/30 p-1.5 rounded border border-slate-700/50">
+                                <div class="text-[9px] text-slate-400 uppercase">Plan</div>
+                                <div class="font-bold text-white text-sm">${stats.plan}</div>
+                            </div>
+                            <div class="bg-${colorName}-900/20 p-1.5 rounded border border-${colorName}-900/30">
+                                <div class="text-[9px] text-${colorName}-400 uppercase">Done</div>
+                                <div class="font-bold text-${colorName}-300 text-sm">${stats.loaded}</div>
+                            </div>
+                            <div class="bg-orange-900/20 p-1.5 rounded border border-orange-900/30">
+                                <div class="text-[9px] text-orange-400 uppercase">Rem</div>
+                                <div class="font-bold text-orange-300 text-sm">${stats.remaining}</div>
+                            </div>
+                        </div>
+                    </div>`;
+                }
+
+                if (hasDischarge) {
+                    statsBlockHtml += renderStatsGrid(sDischarge, 'DISCHARGE', 'pink');
+                }
+
+                if (hasLoad) {
+                    if (hasDischarge) statsBlockHtml += `<div class="border-t border-slate-700/30"></div>`; // Separator
+                    statsBlockHtml += renderStatsGrid(sLoad, 'LOADING', 'green'); // Green/Blue theme, using green for success
+                }
+
+                // Fallback for empty/new vessel
+                if (!hasLoad && !hasDischarge) {
+                    statsBlockHtml += renderStatsGrid(sTotal, 'TOTAL', 'green');
+                }
+
+                statsBlockHtml += '</div>';
+                // --- NEW DYNAMIC STATS BLOCK END ---
+
+                g.innerHTML += `
+                <div onclick="goToDetail(${v.id})" class="${cardClass}">
+                    ${completeHtml}
+                    <div class="p-4 bg-slate-900 border-b border-slate-700 flex justify-between items-start relative z-10">
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <div class="bg-blue-600 p-1.5 rounded text-white"><i class="fa-solid fa-ship"></i></div>
+                                <div>
+                                    <h3 class="font-bold text-white text-lg group-hover:text-blue-400 transition leading-tight">${v.name}</h3>
+                                    <div class="text-xs text-slate-400 font-mono">${v.voy}</div>
+                                </div>
+                            </div>
+                            ${statusBadge}
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xl font-bold text-white">${sTotal.loaded}<span class="text-sm text-slate-500">/${sTotal.plan}</span></div>
+                            <div class="text-xs font-mono text-blue-300 mt-1"><i class="fa-solid fa-clock mr-1"></i>${sTotal.etc}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="px-5 pt-4 pb-2">
+                        ${barsHtml}
+                    </div>
+
+                    ${statsBlockHtml}
+                </div>`;
             });
         }
-
-        window.renderVesselDetail = function() {
-            if (document.activeElement.tagName === 'INPUT') { window.updateLiveTime(); return; }
-            const v = window.appData.vessels.find(x => x.id === window.activeVesselId); if(!v) return window.goToOverview();
-            document.getElementById('detailVesselName').innerText = v.name; document.getElementById('detailVesselVoy').innerText = v.voy; document.getElementById('detailStartTime').innerText = v.startTime;
-            const isLoad = window.currentOpMode === 'load';
-            document.getElementById('tabLoad').className = isLoad ? "flex-1 py-3 rounded-lg font-bold text-sm uppercase transition border-b-4 bg-green-500 text-white border-green-700 shadow-lg shadow-green-500/40 transform scale-105" : "flex-1 py-3 rounded-lg font-bold text-sm uppercase transition border-b-4 bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 opacity-70 hover:opacity-100";
-            document.getElementById('tabDischarge').className = !isLoad ? "flex-1 py-3 rounded-lg font-bold text-sm uppercase transition border-b-4 bg-red-600 text-white border-red-800 shadow-lg shadow-red-600/40 transform scale-105" : "flex-1 py-3 rounded-lg font-bold text-sm uppercase transition border-b-4 bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 opacity-70 hover:opacity-100";
-            const s = calculateVesselStats(v, window.currentOpMode);
-            document.getElementById('detailTotal').innerText = s.plan; document.getElementById('detailLoaded').innerText = s.loaded; document.getElementById('detailRemaining').innerText = s.remaining;
-            document.getElementById('lblLoaded').innerText = isLoad ? "Loaded" : "Discharged";
-            const statCard = document.getElementById('statLoadedCard'); statCard.className = isLoad ? "glass-panel p-3 rounded-xl text-center border-t-4 border-green-500 cursor-pointer hover:bg-slate-700/50 transition active:scale-95" : "glass-panel p-3 rounded-xl text-center border-t-4 border-red-500 cursor-pointer hover:bg-slate-700/50 transition active:scale-95"; 
-            document.getElementById('detailLoaded').className = isLoad ? "text-2xl font-bold text-green-400" : "text-2xl font-bold text-red-500"; 
-            const pct = s.plan > 0 ? Math.round((s.loaded / s.plan) * 100) : 0; const visualPct = Math.max(0, Math.min(100, pct)); const barGradient = isLoad ? "from-green-600 to-green-400" : "from-red-600 to-red-400"; const shipBadgeColor = isLoad ? "bg-green-600 border-green-400" : "bg-red-600 border-red-400";
-            document.getElementById('detailShipProgress').innerHTML = `<div class="bg-slate-800 rounded-xl overflow-hidden shadow-lg border border-slate-700 p-5 relative"><div class="relative w-full h-2 bg-slate-700 rounded-full"><div class="absolute top-0 left-0 h-full bg-gradient-to-r ${barGradient} rounded-full transition-all duration-1000" style="width: ${visualPct}%"></div><div class="absolute top-1/2 -translate-y-1/2 transition-all duration-1000 z-10 flex flex-col items-center" style="left: ${visualPct}%; transform: translate(-50%, -50%);"><div class="${shipBadgeColor} text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg mb-1 whitespace-nowrap border">${pct}%</div><i class="fa-solid fa-ferry text-2xl text-white drop-shadow-md" style="text-shadow: 0 4px 6px rgba(0,0,0,0.5);"></i></div></div></div>`;
-            window.updateLiveTime(); 
-            const sel = document.getElementById('currentGangSelect'); const statusDisp = document.getElementById('gangStatusDisplay');
-            if(sel.options.length <= 1) { window.appData.gangs.forEach(g => { const o = document.createElement('option'); o.value = g; o.innerText = g; o.style.color = getGangColor(g); o.style.fontWeight = "bold"; o.style.backgroundColor = "#1e293b"; sel.appendChild(o); }); }
-            if(sel.value) { const gColor = getGangColor(sel.value); sel.style.color = gColor; sel.style.borderColor = gColor; sel.style.boxShadow = `0 0 10px ${gColor}40`; const gd = window.getGangData(v, sel.value); statusDisp.classList.remove('hidden'); if(gd.status === 'break') { statusDisp.innerHTML = `<i class="fa-solid fa-mug-hot mr-1"></i> ${sel.value} is on <b>BREAK</b>`; statusDisp.className = "mt-2 text-center text-xs text-red-300 bg-red-900/30 border border-red-800 p-2 rounded animate-pulse"; } else { statusDisp.innerHTML = `<i class="fa-solid fa-bolt mr-1"></i> ${sel.value} is <b>WORKING</b>`; statusDisp.className = "mt-2 text-center text-xs text-green-300 bg-green-900/30 border border-green-800 p-2 rounded"; } } else { sel.style.color = "white"; sel.style.borderColor = "rgb(59 130 246)"; sel.style.boxShadow = "none"; statusDisp.classList.add('hidden'); }
-            const tb = document.getElementById('detailTableBody'); if(tb) tb.innerHTML = ''; const curG = sel ? sel.value : ""; const portStats = {};
-            let displayStocks = (v.stocks || []).filter(st => { const itemType = st.type || 'load'; return itemType === window.currentOpMode; });
-            displayStocks.sort((a, b) => { const portA = (a.port || "ZZZZ").toUpperCase(); const portB = (b.port || "ZZZZ").toUpperCase(); if (portA < portB) return -1; if (portA > portB) return 1; if (a.model < b.model) return -1; if (a.model > b.model) return 1; if ((a.lane||"") < (b.lane||"")) return -1; if ((a.lane||"") > (b.lane||"")) return 1; return 0; });
-            displayStocks.forEach(st => {
-                const l = Object.values(st.loadedMap||{}).reduce((a,b)=>a+b,0); const rem = st.plan - l; const myL = (curG && st.loadedMap && st.loadedMap[curG]) || 0;
-                const pColor = getPortColor(st.port); const pName = st.port ? st.port.trim().toUpperCase() : "UNKNOWN";
-                if(!portStats[pName]) portStats[pName] = { plan: 0, loaded: 0 }; portStats[pName].plan += st.plan; portStats[pName].loaded += l;
-                const btnColor = isLoad ? 'bg-green-600 hover:bg-green-500 shadow-green-500/30' : 'bg-red-600 hover:bg-red-500 shadow-red-500/30';
-                tb.innerHTML += `<tr class="${rem===0?'bg-green-900/10':''}" style="border-left: 4px solid ${pColor}">
-                    <td class="p-3 text-xs font-bold uppercase" style="color: ${pColor}">${st.port || '-'}</td>
-                    <td class="p-3 font-bold text-white">${st.model}</td>
-                    <td class="p-3 text-blue-300 font-mono text-xs">${st.lane}</td>
-                    <td class="p-3 text-center bg-slate-800/30 border-x border-slate-700 min-w-[140px]">${rem > 0 || l > 0 ? `<div class="flex gap-1 justify-center items-center"><button onclick="submitLoad(${v.id},${st.id}, -1)" class="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-l text-sm shadow-lg transform active:scale-95 transition"><i class="fa-solid fa-minus"></i></button><input type="number" id="inp_load_${st.id}" class="w-16 bg-slate-700 text-white text-center border-y border-slate-500 py-1.5 text-base font-bold shadow-inner" placeholder="#" onkeypress="if(event.key==='Enter') submitLoad(${v.id}, ${st.id})"><button onclick="submitLoad(${v.id},${st.id}, 1)" class="${btnColor} text-white px-3 py-1.5 rounded-r text-sm shadow-lg transform active:scale-95 transition"><i class="fa-solid fa-plus"></i></button></div>` : '<span class="text-green-500 text-xs font-bold"><i class="fa-solid fa-check mr-1"></i>DONE</span>'}</td>
-                    <td class="p-3 text-center">${st.plan}</td>
-                    <td class="p-3 text-center font-bold text-white bg-slate-700/20">${l}</td>
-                    <td class="p-3 text-center text-blue-400 border-l border-slate-600">${myL||'-'}</td>
-                    <td class="p-3 text-center ${rem===0?'text-green-500':'text-orange-400'}">${rem}</td></tr>`;
-            });
-            const gg = document.getElementById('detailGangGrid'); if(gg) {
-                gg.innerHTML = ''; const gangStats = {}; let shipStats = { qty: 0, startTime: Infinity, endTime: 0 };
-                const currentLogs = (v.logs||[]).filter(l => (l.type || 'load') === window.currentOpMode);
-                currentLogs.forEach(l => {
-                    if (!gangStats[l.gang]) gangStats[l.gang] = { qty: 0, startTime: Infinity, endTime: 0 };
-                    gangStats[l.gang].qty += l.qty; if (l.timestamp < gangStats[l.gang].startTime) gangStats[l.gang].startTime = l.timestamp; if (l.timestamp > gangStats[l.gang].endTime) gangStats[l.gang].endTime = l.timestamp;
-                    shipStats.qty += l.qty; if (l.timestamp < shipStats.startTime) shipStats.startTime = l.timestamp; if (l.timestamp > shipStats.endTime) shipStats.endTime = l.timestamp;
-                });
-                const calculateRate = (qty, startTime) => { if (!qty || startTime === Infinity) return 0; let durationMs = Date.now() - startTime; if (durationMs < 1000 * 60 * 10) durationMs = 1000 * 60 * 10; const hours = durationMs / (1000 * 60 * 60); return Math.round(qty / hours); };
-                const shipRate = calculateRate(shipStats.qty, shipStats.startTime);
-                const perfHeader = gg.parentElement.querySelector('.flex.justify-between');
-                if(perfHeader) {
-                    let rateDisplay = document.getElementById('shipRateDisplay');
-                    if(!rateDisplay) { rateDisplay = document.createElement('div'); rateDisplay.id = 'shipRateDisplay'; rateDisplay.className = "text-right bg-slate-800/50 px-3 py-1 rounded border border-slate-600 ml-auto mr-2"; perfHeader.insertBefore(rateDisplay, perfHeader.lastElementChild); }
-                    rateDisplay.innerHTML = `<div class="text-[10px] text-slate-400 uppercase font-bold text-center">SHIP PRODUCT</div><div class="text-lg font-bold text-yellow-400 leading-none text-center">${shipRate} <span class="text-[10px] text-slate-500">U/Hr</span></div>`;
-                }
-                window.appData.gangs.forEach(g => {
-                    const gColor = getGangColor(g); const isSelected = g === curG; const s = gangStats[g] || { qty: 0, startTime: Infinity }; const rate = calculateRate(s.qty, s.startTime); const gd = window.getGangData(v, g); const isBreak = gd.status === 'break';
-                    const statusDot = isBreak ? `<span class="absolute top-1 right-1 w-3 h-3 rounded-full bg-red-500 shadow-sm border border-white/20"></span>` : `<span class="absolute top-1 right-1 w-3 h-3 rounded-full bg-green-500 shadow-sm border border-white/20 pulse-active"></span>`;
-                    const style = isSelected ? `background-color: ${gColor}; border-color: ${gColor}; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5);` : `border-color: ${gColor}; color: ${gColor}; background-color: rgba(0,0,0,0.2);`;
-                    gg.innerHTML += `<div onclick="window.showGangDetail('${window.escapeStr(g)}')" class="relative p-2 rounded text-center border-2 cursor-pointer transition transform hover:scale-105 active:scale-95 shadow-md flex flex-col justify-between min-h-[90px] ${isBreak?'opacity-70 grayscale-[0.5]':''}" style="${style}">${statusDot}<div class="text-[10px] uppercase truncate font-bold opacity-90 pr-2 border-b border-white/10 pb-1 mb-1">${g}</div><div class="flex-grow flex flex-col justify-center"><div class="text-2xl font-bold leading-none">${s.qty}</div><div class="text-[10px] font-mono mt-1 opacity-90 bg-black/20 rounded px-1"><i class="fa-solid fa-gauge-high mr-1"></i>${rate}/hr</div></div></div>`;
-                });
-            }
-            const portDiv = document.getElementById('detailPortSummary');
-            if(portDiv) {
-                document.getElementById('lblPortSummary').innerText = isLoad ? "Destination Port Summary" : "Origin Port Summary";
-                let pHtml = ''; const sortedPorts = Object.keys(portStats).sort();
-                if (sortedPorts.length === 0) pHtml = '<div class="col-span-full text-center text-slate-500 italic py-4">No data for this mode</div>';
-                else { sortedPorts.forEach(p => { const s = portStats[p]; const pct = s.plan > 0 ? Math.round((s.loaded / s.plan) * 100) : 0; const pColor = getPortColor(p); pHtml += `<div onclick="showPortGangDetails('${window.escapeStr(p)}')" class="bg-slate-700/50 p-3 rounded border border-slate-600 shadow-sm cursor-pointer hover:bg-slate-600 transition active:scale-95 group" style="border-left: 4px solid ${pColor}"><div class="flex justify-between items-center mb-2"><div class="font-bold flex items-center gap-2 group-hover:opacity-80 transition" style="color: ${pColor}"><span class="w-2 h-2 rounded-full border border-white/10" style="background-color: ${pColor}"></span>${p}</div><div class="text-xs font-mono text-blue-200 bg-blue-900/50 px-2 py-0.5 rounded">${s.loaded} / ${s.plan}</div></div><div class="w-full bg-slate-800 rounded-full h-2 mb-1"><div class="h-2 rounded-full transition-all duration-500" style="background-color: ${pColor}; width: ${pct}%"></div></div><div class="text-right text-[10px] text-slate-400">${pct}% Done</div></div>`; }); }
-                portDiv.innerHTML = pHtml;
-            }
-            const hl = document.getElementById('detailHistoryBody'); if(hl) {
-                hl.innerHTML = ''; (v.logs||[]).filter(l => (l.type || 'load') === window.currentOpMode).slice(0,20).forEach(log => {
-                    const t = new Date(log.timestamp).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}); const gColor = getGangColor(log.gang);
-                    let p = log.port; if(!p) { const stk = (v.stocks||[]).find(s=>s.id === log.stockId); p = stk ? stk.port : '-'; }
-                    const pColor = getPortColor(p); const qtyColor = log.qty < 0 ? 'text-red-400' : 'text-green-400';
-                    hl.innerHTML += `<tr class="hover:bg-slate-800/50 transition"><td class="p-3 text-xs text-gray-400 font-mono">${t}</td><td class="p-3 text-xs font-bold" style="color: ${gColor}">${log.gang}</td><td class="p-3 text-xs text-white">${log.model}</td><td class="p-3 text-xs font-bold" style="color:${pColor}">${p || '-'}</td><td class="p-3 text-xs text-gray-400 font-mono">${log.lane}</td><td class="p-3 text-right ${qtyColor} font-bold">${log.qty > 0 ? '+' : ''}${log.qty}</td></tr>`;
-                });
-            }
-        };
         function getGangColor(name) { if(!name) return "#94a3b8"; const palette = ["#ef4444", "#22c55e", "#3b82f6", "#f97316", "#a855f7", "#ec4899", "#eab308", "#06b6d4"]; if (window.appData && window.appData.gangs) { const index = window.appData.gangs.indexOf(name); if (index !== -1) return palette[index % palette.length]; } let hash = 0; for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash); return `hsl(${Math.abs(hash) % 360}, 70%, 60%)`; }
         window.initSystem(); setInterval(() => { if(window.currentView==='overview') renderOverview(); if(window.currentView==='detail') window.updateLiveTime(); }, 1000);
     </script>

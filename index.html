@@ -1797,7 +1797,14 @@
                         // Calculate Duration (Hrs)
                         const hrs = durationMs / (1000 * 60 * 60);
                         if (hrs > 0) {
-                            durationStr = hrs.toFixed(2);
+                            // Calculate HH:MM
+                            const totalMinutes = Math.floor(durationMs / (1000 * 60));
+                            const hh = Math.floor(totalMinutes / 60);
+                            const mm = totalMinutes % 60;
+                            // Pad minutes with leading zero if needed
+                            const mmStr = mm.toString().padStart(2, '0');
+                            durationStr = `${hh}:${mmStr} Hr`;
+                            
                             // Calculate Rate (Total Units / Hrs) - D+L
                             finalRateStr = Math.round(sTotal.loaded / hrs).toLocaleString();
                         }
@@ -1821,7 +1828,7 @@
                             </div>
                             <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-inner flex flex-col justify-center hover:bg-slate-700/50 transition">
                                 <div class="text-[9px] text-slate-400 uppercase font-bold tracking-wider mb-1">Duration</div>
-                                <div class="text-2xl font-bold text-blue-400">${durationStr} <span class="text-[10px] text-slate-500">Hrs</span></div>
+                                <div class="text-xl font-bold text-blue-400">${durationStr}</div>
                             </div>
                         </div>
                     </div>`;

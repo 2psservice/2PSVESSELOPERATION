@@ -608,13 +608,22 @@
                 return;
             }
 
+            // Confirm overwrite if stocks exist
+            const vessel = window.appData.vessels.find(x => x.id === window.activeVesselId);
+            if (vessel.stocks && vessel.stocks.length > 0) {
+                if (!confirm("⚠️ Warning: Uploading a new file will REPLACE all existing stock data for this vessel.\n\nDo you want to continue?")) {
+                    fileInput.value = '';
+                    return;
+                }
+            }
+
             const reader = new FileReader();
             reader.onload = function(e) {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, {type: 'array'});
                 
-                const vessel = window.appData.vessels.find(x => x.id === window.activeVesselId);
-                if(!vessel.stocks) vessel.stocks = [];
+                // Clear existing stocks to ensure only latest file data is used
+                vessel.stocks = [];
                 let addedCount = 0;
 
                 // Process LOAD Sheet
@@ -677,7 +686,7 @@
 
                 window.saveData();
                 window.renderAdminStockTable();
-                window.showAlert(`Import Successful! Added ${addedCount} items.`);
+                window.showAlert(`Import Successful! Replaced with ${addedCount} items from new file.`);
                 fileInput.value = '';
             };
             reader.readAsArrayBuffer(file);
@@ -1767,9 +1776,55 @@
                 let cardClass = "bg-slate-800 rounded-xl overflow-hidden shadow-lg border border-slate-700 cursor-pointer hover:border-blue-500 transition group relative";
                 
                 if (isComplete) {
-                    let completeTimeStr = "Unknown"; if (v.logs && v.logs.length > 0) { const lastLog = v.logs[0]; const d = new Date(lastLog.timestamp); completeTimeStr = d.toLocaleDateString('th-TH', {day:'numeric', month:'short'}) + ' ' + d.toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'}); }
+                    let completeTimeStr = "Unknown";
+                    let durationStr = "0.00";
+                    let finalRateStr = "0";
+
+                    if (v.logs && v.logs.length > 0) { 
+                        // Clone and sort logs to find start and end
+                        const sortedLogs = [...v.logs].sort((a, b) => a.timestamp - b.timestamp);
+                        const firstLog = sortedLogs[0];
+                        const lastLog = sortedLogs[sortedLogs.length - 1];
+                        
+                        const startMs = firstLog.timestamp;
+                        const endMs = lastLog.timestamp;
+                        const durationMs = endMs - startMs;
+                        
+                        // Format End Time
+                        const d = new Date(endMs); 
+                        completeTimeStr = d.toLocaleDateString('th-TH', {day:'numeric', month:'short'}) + ' ' + d.toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'}); 
+                        
+                        // Calculate Duration (Hrs)
+                        const hrs = durationMs / (1000 * 60 * 60);
+                        if (hrs > 0) {
+                            durationStr = hrs.toFixed(2);
+                            // Calculate Rate (Total Units / Hrs) - D+L
+                            finalRateStr = Math.round(sTotal.loaded / hrs).toLocaleString();
+                        }
+                    }
+
                     cardClass = "bg-slate-800 rounded-xl overflow-hidden shadow-lg border-2 border-green-500 cursor-pointer transition group relative";
-                    completeHtml = `<div class="absolute inset-0 top-20 bg-slate-900/90 z-20 flex flex-col items-center justify-center text-center backdrop-blur-sm"><h3 class="text-4xl font-bold text-green-400 mb-2 uppercase tracking-widest drop-shadow-md">COMPLETE</h3><div class="text-white text-sm bg-slate-800 px-4 py-1.5 rounded-full border border-green-700/50 shadow-lg"><i class="fa-solid fa-flag-checkered mr-2 text-yellow-400"></i>${completeTimeStr}</div></div>`;
+                    
+                    // Removed 'fade-in' class to prevent blinking on refresh
+                    completeHtml = `
+                    <div class="absolute inset-0 top-[5.5rem] bg-slate-900/95 z-20 flex flex-col items-center justify-center text-center backdrop-blur-sm p-4">
+                        <h3 class="text-3xl font-extrabold text-green-500 mb-2 uppercase tracking-widest drop-shadow-[0_2px_10px_rgba(34,197,94,0.5)]">COMPLETE</h3>
+                        
+                        <div class="text-white text-xs bg-slate-800 px-4 py-1.5 rounded-full border border-green-600/50 shadow-lg mb-5 flex items-center gap-2">
+                            <i class="fa-solid fa-flag-checkered text-yellow-400"></i> Finish: ${completeTimeStr}
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4 w-full px-2">
+                            <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-inner flex flex-col justify-center hover:bg-slate-700/50 transition">
+                                <div class="text-[9px] text-slate-400 uppercase font-bold tracking-wider mb-1">Ship Product (D+L)</div>
+                                <div class="text-2xl font-bold text-yellow-400">${finalRateStr} <span class="text-[10px] text-slate-500">U/Hr</span></div>
+                            </div>
+                            <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-inner flex flex-col justify-center hover:bg-slate-700/50 transition">
+                                <div class="text-[9px] text-slate-400 uppercase font-bold tracking-wider mb-1">Duration</div>
+                                <div class="text-2xl font-bold text-blue-400">${durationStr} <span class="text-[10px] text-slate-500">Hrs</span></div>
+                            </div>
+                        </div>
+                    </div>`;
                 }
 
                 let barsHtml = '';

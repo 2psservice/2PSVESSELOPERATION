@@ -138,12 +138,12 @@
                     </div>
                     <div class="text-right flex flex-col items-end">
                         <div class="flex items-center gap-2 mb-1 bg-slate-900/50 px-3 py-1 rounded border border-slate-600">
-                            <span id="lblShipProduct" class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">SHIP PRODUCT (D+L)</span>
+                            <span id="lblShipProduct" class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">SHIP PRODUCT (Gross)</span>
                             <span class="text-yellow-400 font-bold font-mono text-xl leading-none" id="detailShipProduct">0</span>
                             <span class="text-[10px] text-yellow-500/70 font-bold">U/Hr</span>
                         </div>
                         <div class="text-2xl font-bold text-blue-400 font-mono leading-none mt-1" id="detailETC">--:--</div>
-                        <div class="text-[10px] text-slate-500 mt-1">Est. Compl (Total)</div>
+                        <div class="text-[10px] text-slate-500 mt-1">Est. Compl (Dynamic)</div>
                     </div>
                 </div>
 
@@ -417,7 +417,7 @@
     </main>
 
     <footer class="text-center text-slate-600 text-xs py-4 mt-auto">
-        &copy; 2026 2PS VESSEL OPERATION V8.1 (Excel Report)
+        &copy; 2026 2PS VESSEL OPERATION V8.4 (Gross Ship Rate)
     </footer>
 
     <!-- MODALS -->
@@ -1390,14 +1390,39 @@
                 tb.innerHTML += `<tr class="${rowClass} transition-all duration-500" style="border-left: 4px solid ${pColor}"><td class="p-3 text-xs font-bold uppercase min-w-[100px]" style="${rem===0?'color:gray':portColorStyle}">${st.port || '-'}</td><td class="p-3 text-xs font-bold text-gray-400 min-w-[100px]">${st.port2 || '-'}</td><td class="p-3 font-bold ${modelColor} min-w-[70px]">${st.model}</td><td class="p-3 text-blue-300 font-mono text-xs min-w-[70px]">${st.lane}</td><td class="p-3 text-center bg-slate-800/30 border-x border-slate-700 min-w-[140px]">${rem > 0 || l > 0 ? `<div class="flex gap-1 justify-center items-center"><button onclick="submitLoad(${v.id},${st.id}, -1)" class="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-l text-sm shadow-lg transform active:scale-95 transition"><i class="fa-solid fa-minus"></i></button><input type="number" id="inp_load_${st.id}" class="w-16 bg-slate-700 text-white text-center border-y border-slate-500 py-1.5 text-base font-bold shadow-inner" placeholder="#" onkeypress="if(event.key==='Enter') submitLoad(${v.id}, ${st.id})"><button onclick="submitLoad(${v.id},${st.id}, 1)" class="${btnColor} text-white px-3 py-1.5 rounded-r text-sm shadow-lg transform active:scale-95 transition"><i class="fa-solid fa-plus"></i></button></div>` : '<span class="text-green-500 text-xs font-bold"><i class="fa-solid fa-check mr-1"></i>DONE</span>'}</td><td class="p-3 text-center ${textClass}">${st.plan}</td><td class="p-3 text-center font-bold text-green-400 bg-green-900/20 border-x border-slate-700 text-lg">${l}</td><td class="p-3 text-center ${rem===0?'text-green-500 font-bold':'text-orange-400 font-bold'}">${rem}</td></tr>`;
             });
             const gg = document.getElementById('detailGangGrid'); if(gg) {
-                gg.innerHTML = ''; const gangStats = {}; let shipStats = { qty: 0, startTime: Infinity, endTime: 0 };
-                const currentLogs = (v.logs||[]).filter(l => (l.type || 'load') === window.currentOpMode);
-                currentLogs.forEach(l => { if (!gangStats[l.gang]) gangStats[l.gang] = { qty: 0, startTime: Infinity, endTime: 0 }; gangStats[l.gang].qty += l.qty; if (l.timestamp < gangStats[l.gang].startTime) gangStats[l.gang].startTime = l.timestamp; if (l.timestamp > gangStats[l.gang].endTime) gangStats[l.gang].endTime = l.timestamp; shipStats.qty += l.qty; if (l.timestamp < shipStats.startTime) shipStats.startTime = l.timestamp; if (l.timestamp > shipStats.endTime) shipStats.endTime = l.timestamp; });
-                const calculateRate = (qty, startTime) => { if (!qty || startTime === Infinity) return 0; let durationMs = Date.now() - startTime; if (durationMs < 1000 * 60 * 10) durationMs = 1000 * 60 * 10; const hours = durationMs / (1000 * 60 * 60); return Math.round(qty / hours); };
-                const shipRate = calculateRate(shipStats.qty, shipStats.startTime);
+                gg.innerHTML = '';
+                // Calculate rates per gang
+                const gangMetrics = {};
+                activeGangs.forEach(g => {
+                    gangMetrics[g] = calculateGangStats(v, g);
+                });
+
+                // Calculate Ship Product based on current working gangs
+                let currentShipRate = s.shipProduct || 0;
+                
                 const perfHeader = gg.parentElement.querySelector('.flex.justify-between');
-                if(perfHeader) { let rateDisplay = document.getElementById('shipRateDisplay'); if(!rateDisplay) { rateDisplay = document.createElement('div'); rateDisplay.id = 'shipRateDisplay'; rateDisplay.className = "text-right bg-slate-800/50 px-3 py-1 rounded border border-slate-600 ml-auto mr-2"; perfHeader.insertBefore(rateDisplay, perfHeader.lastElementChild); } rateDisplay.innerHTML = `<div class="text-[10px] text-slate-400 uppercase font-bold text-center">SHIP PRODUCT</div><div class="text-lg font-bold text-yellow-400 leading-none text-center">${shipRate} <span class="text-[10px] text-slate-500">U/Hr</span></div>`; }
-                activeGangs.forEach(g => { const gColor = getGangColor(g); const isSelected = g === curG; const s = gangStats[g] || { qty: 0, startTime: Infinity }; const rate = calculateRate(s.qty, s.startTime); const gd = window.getGangData(v, g); const isBreak = gd.status === 'break'; const statusDot = isBreak ? `<span class="absolute top-1 right-1 w-3 h-3 rounded-full bg-red-500 shadow-sm border border-white/20"></span>` : `<span class="absolute top-1 right-1 w-3 h-3 rounded-full bg-green-500 shadow-sm border border-white/20 pulse-active"></span>`; const style = isSelected ? `background-color: ${gColor}; border-color: ${gColor}; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5);` : `border-color: ${gColor}; color: ${gColor}; background-color: rgba(0,0,0,0.2);`; gg.innerHTML += `<div onclick="window.showGangDetail('${window.escapeStr(g)}')" class="relative p-2 rounded text-center border-2 cursor-pointer transition transform hover:scale-105 active:scale-95 shadow-md flex flex-col justify-between min-h-[90px] ${isBreak?'opacity-70 grayscale-[0.5]':''}" style="${style}">${statusDot}<div class="text-[10px] uppercase truncate font-bold opacity-90 pr-2 border-b border-white/10 pb-1 mb-1">${g}</div><div class="flex-grow flex flex-col justify-center"><div class="text-2xl font-bold leading-none">${s.qty}</div><div class="text-[10px] font-mono mt-1 opacity-90 bg-black/20 rounded px-1"><i class="fa-solid fa-gauge-high mr-1"></i>${rate}/hr</div></div></div>`; });
+                if(perfHeader) { 
+                    let rateDisplay = document.getElementById('shipRateDisplay'); 
+                    if(!rateDisplay) { 
+                        rateDisplay = document.createElement('div'); 
+                        rateDisplay.id = 'shipRateDisplay'; 
+                        rateDisplay.className = "text-right bg-slate-800/50 px-3 py-1 rounded border border-slate-600 ml-auto mr-2"; 
+                        perfHeader.insertBefore(rateDisplay, perfHeader.lastElementChild); 
+                    } 
+                    rateDisplay.innerHTML = `<div class="text-[10px] text-slate-400 uppercase font-bold text-center">SHIP PRODUCT (Gross)</div><div class="text-lg font-bold text-yellow-400 leading-none text-center">${currentShipRate} <span class="text-[10px] text-slate-500">U/Hr</span></div>`; 
+                }
+
+                activeGangs.forEach(g => { 
+                    const gColor = getGangColor(g); 
+                    const isSelected = g === curG; 
+                    const metrics = gangMetrics[g];
+                    const gd = window.getGangData(v, g); 
+                    const isBreak = gd.status === 'break'; 
+                    const statusDot = isBreak ? `<span class="absolute top-1 right-1 w-3 h-3 rounded-full bg-red-500 shadow-sm border border-white/20"></span>` : `<span class="absolute top-1 right-1 w-3 h-3 rounded-full bg-green-500 shadow-sm border border-white/20 pulse-active"></span>`; 
+                    const style = isSelected ? `background-color: ${gColor}; border-color: ${gColor}; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5);` : `border-color: ${gColor}; color: ${gColor}; background-color: rgba(0,0,0,0.2);`; 
+                    
+                    gg.innerHTML += `<div onclick="window.showGangDetail('${window.escapeStr(g)}')" class="relative p-2 rounded text-center border-2 cursor-pointer transition transform hover:scale-105 active:scale-95 shadow-md flex flex-col justify-between min-h-[90px] ${isBreak?'opacity-70 grayscale-[0.5]':''}" style="${style}">${statusDot}<div class="text-[10px] uppercase truncate font-bold opacity-90 pr-2 border-b border-white/10 pb-1 mb-1">${g}</div><div class="flex-grow flex flex-col justify-center"><div class="text-2xl font-bold leading-none">${metrics.totalQty}</div><div class="text-[10px] font-mono mt-1 opacity-90 bg-black/20 rounded px-1"><i class="fa-solid fa-gauge-high mr-1"></i>${metrics.rate}/hr</div></div></div>`; 
+                });
             }
             const portDiv = document.getElementById('detailPortSummary');
             if(portDiv) {
@@ -1458,28 +1483,33 @@
             window.currentView = 'detail'; 
             window.activeVesselId = vId; 
             
-            // Logic to auto-select tab based on available work
+            // Logic to auto-select tab based on ACTIVE work (Smart Tab Selection)
             const v = window.appData.vessels.find(x => x.id === vId);
             if (v) {
-                let hasDischarge = false;
-                let hasLoad = false;
+                // Calculate stats to check what is finished
+                const sDischarge = calculateVesselStats(v, 'discharge');
+                const sLoad = calculateVesselStats(v, 'load');
                 
-                if (v.stocks) {
-                    hasDischarge = v.stocks.some(s => s.type === 'discharge');
-                    hasLoad = v.stocks.some(s => s.type === 'load' || !s.type); // Default type is 'load' if undefined
-                }
+                const hasDischargePlan = sDischarge.plan > 0;
+                const hasLoadPlan = sLoad.plan > 0;
                 
-                // Priority: 
-                // 1. If has Discharge (regardless of Load) -> Show Discharge (covers "Both" and "Discharge Only")
-                // 2. If NO Discharge but has Load -> Show Load
-                // 3. Else -> Default to Discharge (left tab)
-                
-                if (hasDischarge) {
+                const isDischargeActive = sDischarge.remaining > 0;
+                const isLoadActive = sLoad.remaining > 0;
+
+                // Priority 1: Jump to Active Work immediately
+                if (hasDischargePlan && isDischargeActive) {
                     window.currentOpMode = 'discharge';
-                } else if (hasLoad) {
+                } else if (hasLoadPlan && isLoadActive) {
                     window.currentOpMode = 'load';
                 } else {
-                    window.currentOpMode = 'discharge';
+                    // Priority 2: If both finished (or neither started), prefer Discharge -> Load -> Default
+                    if (hasDischargePlan) {
+                        window.currentOpMode = 'discharge';
+                    } else if (hasLoadPlan) {
+                        window.currentOpMode = 'load';
+                    } else {
+                        window.currentOpMode = 'discharge';
+                    }
                 }
             } else {
                 // Fallback
@@ -1735,56 +1765,7 @@
             }); }
         }
 
-        // --- NEW HELPER: Calculate TOTAL Net Working Time (Sum of all gangs) ---
-        function calculateTotalNetTime(v) {
-            // 1. Determine Base Date (Start Date)
-            let baseDate = new Date();
-            if (v.logs && v.logs.length > 0) {
-                const sortedLogs = [...v.logs].sort((a, b) => a.timestamp - b.timestamp);
-                baseDate = new Date(sortedLogs[0].timestamp);
-            } else if (v.startTime) {
-                const [h, m] = v.startTime.split(':').map(Number);
-                baseDate.setHours(h, m, 0, 0);
-            }
-            const refZeroDate = new Date(baseDate);
-            refZeroDate.setHours(0,0,0,0);
-
-            const activeGangs = window.appData.gangs.filter(g => !(window.appData.disabledGangs || []).includes(g));
-            if (activeGangs.length === 0) return { totalNetTimeMs: 0, gangsWithHistory: 0 };
-
-            let totalNetTimeMs = 0;
-            let gangsWithHistory = 0;
-
-            activeGangs.forEach(g => {
-                const periods = window.getGangData(v, g).periods; 
-                if (!periods || periods.length === 0) return;
-
-                let gangDuration = 0;
-                let lastTs = -1;
-
-                periods.forEach(p => {
-                    let startMs = parseTimeWithDayWrap(p.start, refZeroDate, lastTs);
-                    lastTs = startMs;
-
-                    let endMs;
-                    if (p.end) {
-                        endMs = parseTimeWithDayWrap(p.end, refZeroDate, lastTs);
-                        lastTs = endMs;
-                    } else {
-                        endMs = Date.now();
-                        if (endMs < startMs) endMs = startMs;
-                    }
-                    gangDuration += (endMs - startMs);
-                });
-
-                if (gangDuration > 0) {
-                    totalNetTimeMs += gangDuration;
-                    gangsWithHistory++;
-                }
-            });
-
-            return { totalNetTimeMs, gangsWithHistory };
-        }
+        // --- NEW CALCULATIONS START ---
 
         function parseTimeWithDayWrap(timeStr, refZeroDate, prevTimestamp) {
             if(!timeStr) return prevTimestamp > 0 ? prevTimestamp : refZeroDate.getTime();
@@ -1801,6 +1782,59 @@
             return ts;
         }
 
+        // Helper to get total net working time for a single gang
+        function calculateGangStats(v, gangName) {
+            // 1. Calculate Total Net Working Time
+            let baseDate = new Date();
+            if (v.logs && v.logs.length > 0) {
+                const sortedLogs = [...v.logs].sort((a, b) => a.timestamp - b.timestamp);
+                baseDate = new Date(sortedLogs[0].timestamp);
+            } else if (v.startTime) {
+                const [h, m] = v.startTime.split(':').map(Number);
+                baseDate.setHours(h, m, 0, 0);
+            }
+            const refZeroDate = new Date(baseDate);
+            refZeroDate.setHours(0,0,0,0);
+
+            const periods = window.getGangData(v, gangName).periods;
+            let netTimeMs = 0;
+            if (periods && periods.length > 0) {
+                let lastTs = -1;
+                periods.forEach(p => {
+                    let startMs = parseTimeWithDayWrap(p.start, refZeroDate, lastTs);
+                    lastTs = startMs;
+                    let endMs;
+                    if (p.end) {
+                        endMs = parseTimeWithDayWrap(p.end, refZeroDate, lastTs);
+                        lastTs = endMs;
+                    } else {
+                        endMs = Date.now();
+                        if (endMs < startMs) endMs = startMs;
+                    }
+                    netTimeMs += (endMs - startMs);
+                });
+            }
+
+            // 2. Calculate Total Qty (All time) for this gang
+            let totalQty = 0;
+            if (v.logs) {
+                v.logs.forEach(l => {
+                    if (l.gang === gangName) totalQty += l.qty;
+                });
+            }
+
+            // 3. Calculate Rate (Units/Hour)
+            // Use 0 if working time is insignificant (< 1 min) to prevent skew
+            let rate = 0;
+            // Support extrapolation from 1 minute (60000ms) onwards
+            if (netTimeMs >= 60000) { 
+                const hours = netTimeMs / (1000 * 60 * 60);
+                rate = Math.round(totalQty / hours);
+            }
+
+            return { rate, netTimeMs, totalQty };
+        }
+
         function calculateVesselStats(v, mode = null) {
             let p = 0, l = 0;
             (v.stocks || []).forEach(s => {
@@ -1810,6 +1844,7 @@
                 }
             });
 
+            // Calculate Global Stats
             let totalPlan = 0, totalLoaded = 0;
             (v.stocks || []).forEach(s => {
                 totalPlan += s.plan;
@@ -1820,48 +1855,50 @@
             let shipProduct = 0;
             const remainingGlobal = totalPlan - totalLoaded;
 
-            // Calculate Rate based on NET WORKING TIME
-            if (totalLoaded > 0) {
-                const { totalNetTimeMs, gangsWithHistory } = calculateTotalNetTime(v);
+            // --- REFINED SHIP PRODUCT LOGIC (GROSS) ---
+            // Formula: Total Loaded / (Current Time - Start Time)
+            if (totalLoaded > 0 && v.logs && v.logs.length > 0) {
+                // v.logs[0] is newest, v.logs[length-1] is oldest (Start)
+                const firstLog = v.logs[v.logs.length - 1]; 
+                const startTime = firstLog.timestamp;
+                let endTime = Date.now();
 
-                // Only calculate if accumulated work > 1 minute
-                if (totalNetTimeMs > 60000) {
-                    // Efficiency = Units per Gang-Millisecond
-                    const efficiency = totalLoaded / totalNetTimeMs;
+                // If fully complete, stop the clock at the last move
+                if (totalPlan > 0 && remainingGlobal <= 0) {
+                    const lastLog = v.logs[0];
+                    endTime = lastLog.timestamp;
+                }
 
-                    // Determine how many gangs are TRULY working RIGHT NOW to project ETC
-                    let activeWorkingGangs = 0;
-                    const allGangs = window.appData.gangs.filter(g => !(window.appData.disabledGangs || []).includes(g));
-                    allGangs.forEach(g => {
-                        const gd = window.getGangData(v, g);
-                        if (gd.status === 'working') activeWorkingGangs++;
-                    });
+                const durationMs = endTime - startTime;
+                // Avoid division by zero or tiny duration (e.g. < 1 min)
+                if (durationMs > 60000) {
+                    const durationHrs = durationMs / (1000 * 60 * 60);
+                    shipProduct = Math.round(totalLoaded / durationHrs);
+                }
+            }
 
-                    // If nobody is working (all break), predict based on historical active gangs (or at least 1)
-                    const forecastGangs = activeWorkingGangs > 0 ? activeWorkingGangs : (gangsWithHistory > 0 ? gangsWithHistory : 1);
+            // --- REFINED ETC LOGIC ---
+            if (totalLoaded > 0 && remainingGlobal > 0) {
+                if (shipProduct > 0) {
+                    const timeToFinishHours = remainingGlobal / shipProduct;
+                    const timeToFinishMs = timeToFinishHours * 60 * 60 * 1000;
                     
-                    // Projected Rate = Efficiency * Current Gangs
-                    const projectedRateMs = efficiency * forecastGangs;
-                    shipProduct = Math.round(projectedRateMs * 1000 * 60 * 60);
-
-                    if (remainingGlobal > 0) {
-                        const timeToFinishMs = remainingGlobal / projectedRateMs;
-                        const etcDate = new Date(Date.now() + timeToFinishMs);
-                        const dStr = etcDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
-                        const tStr = etcDate.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-                        etc = `${dStr} ${tStr}`;
-                    } else if (remainingGlobal <= 0) {
-                         etc = "Done";
-                    }
+                    const etcDate = new Date(Date.now() + timeToFinishMs);
+                    const dStr = etcDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+                    const tStr = etcDate.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+                    etc = `${dStr} ${tStr}`;
                 } else {
-                    etc = "Calc...";
+                    etc = "Calc..."; // No rate yet
                 }
             } else if (totalPlan > 0 && remainingGlobal <= 0) {
                 etc = "Done";
+            } else if (totalLoaded === 0) {
+                etc = "Waiting...";
             }
 
             return { plan: p, loaded: l, remaining: p - l, etc, shipProduct };
         }
+        // --- NEW CALCULATIONS END ---
 
         function renderOverview() {
             const g = document.getElementById('vesselGrid'); g.innerHTML = ''; if(window.appData.vessels.length===0) { g.innerHTML='<div class="text-center text-gray-500 col-span-full py-10">No Active Vessels</div>'; return;}
@@ -1891,9 +1928,6 @@
                 
                 if (isComplete) {
                     let completeTimeStr = "Unknown";
-                    let durationStr = "0.00";
-                    let finalRateStr = "0";
-
                     // Use logs for finish time reference
                     if (v.logs && v.logs.length > 0) { 
                         const sortedLogs = [...v.logs].sort((a, b) => a.timestamp - b.timestamp);
@@ -1901,20 +1935,6 @@
                         const endMs = lastLog.timestamp;
                         const d = new Date(endMs); 
                         completeTimeStr = d.toLocaleDateString('th-TH', {day:'numeric', month:'short'}) + ' ' + d.toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'}); 
-                    }
-
-                    // Use Avg Net Duration for display
-                    const { totalNetTimeMs, gangsWithHistory } = calculateTotalNetTime(v);
-                    const avgNetDurationMs = gangsWithHistory > 0 ? (totalNetTimeMs / gangsWithHistory) : 0;
-                    const hrs = avgNetDurationMs / (1000 * 60 * 60);
-
-                    if (hrs > 0) {
-                        const totalMinutes = Math.floor(avgNetDurationMs / (1000 * 60));
-                        const hh = Math.floor(totalMinutes / 60);
-                        const mm = totalMinutes % 60;
-                        const mmStr = mm.toString().padStart(2, '0');
-                        durationStr = `${hh}:${mmStr} Hr`;
-                        finalRateStr = Math.round(sTotal.loaded / hrs).toLocaleString();
                     }
 
                     cardClass = "bg-slate-800 rounded-xl overflow-hidden shadow-lg border-2 border-green-500 cursor-pointer transition group relative";
@@ -1925,17 +1945,6 @@
                         
                         <div class="text-white text-xs bg-slate-800 px-4 py-1.5 rounded-full border border-green-600/50 shadow-lg mb-5 flex items-center gap-2">
                             <i class="fa-solid fa-flag-checkered text-yellow-400"></i> Finish: ${completeTimeStr}
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-4 w-full px-2">
-                            <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-inner flex flex-col justify-center hover:bg-slate-700/50 transition">
-                                <div class="text-[9px] text-slate-400 uppercase font-bold tracking-wider mb-1">Ship Product (Net)</div>
-                                <div class="text-2xl font-bold text-yellow-400">${finalRateStr} <span class="text-[10px] text-slate-500">U/Hr</span></div>
-                            </div>
-                            <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-inner flex flex-col justify-center hover:bg-slate-700/50 transition">
-                                <div class="text-[9px] text-slate-400 uppercase font-bold tracking-wider mb-1">Net Duration</div>
-                                <div class="text-xl font-bold text-blue-400">${durationStr}</div>
-                            </div>
                         </div>
                     </div>`;
                 }

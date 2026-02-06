@@ -330,7 +330,7 @@
                         <div class="flex justify-between items-end mb-4 gap-2">
                             <div class="flex-grow">
                                 <label class="block text-xs font-bold text-gray-500 mb-1">Select Vessel to Edit:</label>
-                                <select id="adminVesselSelect" onchange="renderAdminStockTable()" class="w-full p-2 border-2 border-green-500 rounded bg-green-50 font-bold text-gray-800">
+                                <select id="adminVesselSelect" onchange="window.handleAdminVesselChange()" class="w-full p-2 border-2 border-green-500 rounded bg-green-50 font-bold text-gray-800">
                                     <option value="">-- No Vessel --</option>
                                 </select>
                             </div>
@@ -379,15 +379,18 @@
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div class="bg-white p-6 rounded-xl text-black shadow-lg shadow-slate-900/50 h-fit">
-                             <h3 class="text-lg font-bold mb-4 text-purple-800 border-b pb-2"><i class="fa-solid fa-users-gear mr-2"></i>3. Manage Gangs</h3>
+                             <h3 class="text-lg font-bold mb-4 text-purple-800 border-b pb-2 flex justify-between items-center">
+                                <span><i class="fa-solid fa-users-gear mr-2"></i>3. Manage Gangs</span>
+                                <span id="adminGangVesselName" class="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded hidden"></span>
+                             </h3>
                              <div class="flex gap-2 mb-4">
-                                <input type="text" id="newGangName" class="input-light" placeholder="New Gang Name">
+                                <input type="text" id="newGangName" class="input-light" placeholder="New Gang Name (Global)">
                                 <button onclick="addNewGang()" class="bg-purple-600 text-white font-bold px-4 rounded shadow"><i class="fa-solid fa-plus"></i></button>
                             </div>
-                            <div class="text-[10px] text-gray-500 mb-2">
-                                <i class="fa-solid fa-circle-info mr-1"></i> Use toggle to enable/disable gangs for operation.
+                            <div class="text-[10px] text-gray-500 mb-2" id="adminGangHelpText">
+                                <i class="fa-solid fa-circle-info mr-1"></i> Select a vessel above to assign/enable gangs.
                             </div>
-                            <ul id="adminGangList" class="space-y-1 max-h-48 overflow-y-auto"></ul>
+                            <ul id="adminGangList" class="space-y-1 max-h-48 overflow-y-auto relative min-h-[50px]"></ul>
                         </div>
 
                         <!-- Admin Security Section -->
@@ -417,7 +420,7 @@
     </main>
 
     <footer class="text-center text-slate-600 text-xs py-4 mt-auto">
-        &copy; 2026 2PS VESSEL OPERATION V8.4 (Gross Ship Rate)
+        &copy; 2026 2PS VESSEL OPERATION V8.6 (Vessel Specific Gangs)
     </footer>
 
     <!-- MODALS -->
@@ -630,7 +633,6 @@
                     const sheet = workbook.Sheets['LOAD'];
                     const json = XLSX.utils.sheet_to_json(sheet);
                     json.forEach(row => {
-                        // Mapping: Port of Discharge, Final port discharge, Model, Unit, Block
                         const model = row['Model'];
                         const qty = row['Unit'];
                         if(!model || !qty) return;
@@ -658,7 +660,6 @@
                     const sheet = workbook.Sheets['DISCHARGE'];
                     const json = XLSX.utils.sheet_to_json(sheet);
                     json.forEach(row => {
-                        // Mapping: Port load, Port Discharge, Model, Unit, Deck
                         const model = row['Model'];
                         const qty = row['Unit'];
                         if(!model || !qty) return;
@@ -671,9 +672,7 @@
                             id: Date.now() + Math.random(),
                             type: 'discharge',
                             model: model.toString(),
-                            port: portLoad.toString(), // Port Load (Origin) is primary for grouping? Or use Disch? Let's use Load as primary per old logic, or switch.
-                            // User request: Port load, Port Discharge... 
-                            // Let's store Port Load in 'port' and Port Discharge in 'port2'
+                            port: portLoad.toString(),
                             port2: portDisch.toString(),
                             lane: lane.toString(),
                             plan: parseInt(qty) || 0,
@@ -692,7 +691,8 @@
         }
         // --- EXCEL UPLOAD LOGIC END ---
 
-        // --- EXPORT REPORT TO EXCEL ---
+        // ... existing code ... (Export, Stats, etc.)
+        
         window.exportReportToExcel = function() {
             const v = window.appData.vessels.find(x => x.id === window.activeVesselId);
             if (!v) return;
@@ -813,77 +813,7 @@
 
             XLSX.utils.book_append_sheet(wb, wsOverview, "Summary");
 
-            // 2. PERIOD BREAKDOWN SHEET
-            const periodData = [["Period", "Gang", "Port", "Model", "Qty"]];
-            
-            // Helper to determine period
-            const findPeriodName = (logTimestamp, gangName) => {
-                const logTime = new Date(logTimestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-                const gp = (v.gangPeriods && v.gangPeriods[gangName]) ? v.gangPeriods[gangName] : v.periods;
-                if(!gp) return "Unknown";
-                
-                for (let p of gp) {
-                    const start = p.start;
-                    const end = p.end ? p.end : "23:59";
-                    // Simple check spanning midnight might need complex logic, but sticking to basic range check for now
-                    if (logTime >= start && logTime <= end) return p.name;
-                    if (p.end === null && logTime >= start) return p.name; // Open ended last period
-                }
-                return "Unknown";
-            };
-
-            // Process data for pivot
-            const pivot = {}; // Period -> Gang -> Port -> Model -> Qty
-            
-            sortedLogs.forEach(l => {
-                const pName = findPeriodName(l.timestamp, l.gang);
-                const g = l.gang;
-                const port = l.port || "UNKNOWN";
-                const m = l.model || "UNKNOWN";
-
-                if(!pivot[pName]) pivot[pName] = {};
-                if(!pivot[pName][g]) pivot[pName][g] = {};
-                if(!pivot[pName][g][port]) pivot[pName][g][port] = {};
-                if(!pivot[pName][g][port][m]) pivot[pName][g][port][m] = 0;
-                pivot[pName][g][port][m] += l.qty;
-            });
-
-            // Flatten pivot to rows
-            Object.keys(pivot).sort().forEach(pName => {
-                Object.keys(pivot[pName]).sort().forEach(gang => {
-                    Object.keys(pivot[pName][gang]).sort().forEach(port => {
-                        Object.keys(pivot[pName][gang][port]).sort().forEach(model => {
-                            periodData.push([pName, gang, port, model, pivot[pName][gang][port][model]]);
-                        });
-                    });
-                });
-            });
-
-            const wsPeriod = XLSX.utils.aoa_to_sheet(periodData);
-            
-            // Style Header Row (Row 0)
-            const rangePeriod = XLSX.utils.decode_range(wsPeriod['!ref']);
-            for (let c = rangePeriod.s.c; c <= rangePeriod.e.c; c++) {
-                const cellRef = XLSX.utils.encode_cell({r: 0, c: c});
-                if (wsPeriod[cellRef]) {
-                    wsPeriod[cellRef].s = { 
-                        font: { bold: true }, 
-                        fill: { fgColor: { rgb: "D1FAE5" } }, // Light Green
-                        border: { bottom: { style: "thin", color: { rgb: "000000" } } }
-                    };
-                }
-            }
-
-            // CHANGE: Column Widths for Period
-            wsPeriod['!cols'] = [{wch:15}, {wch:15}, {wch:15}, {wch:25}, {wch:10}];
-
-            // CHANGE: Sheet Tab Color (Yellow)
-            if(!wsPeriod['!properties']) wsPeriod['!properties'] = {};
-            wsPeriod['!properties'].tabColor = { rgb: "FFFF00" };
-
-            XLSX.utils.book_append_sheet(wb, wsPeriod, "Period Breakdown");
-
-            // 3. DETAILED LOGS SHEET
+            // 2. DETAILED LOGS SHEET
             const logSheetData = [["Date", "Time", "Type", "Gang", "Port", "Model", "Block/Lane", "Qty"]];
             sortedLogs.forEach(l => {
                 const d = new Date(l.timestamp);
@@ -980,6 +910,7 @@
         }
         
         window.showStatDetails = function(type) {
+            // ... (keep logic from previous) ...
             const v = window.appData.vessels.find(x => x.id === window.activeVesselId); if (!v) return;
             let portData = {}; let titleText = ""; let colorClass = "text-white"; const mode = window.currentOpMode;
             (v.stocks || []).forEach(s => {
@@ -989,17 +920,12 @@
                     else if(type === 'loaded') val = loaded;
                     else if(type === 'remaining') val = s.plan - loaded;
                     if(val > 0) {
-                        // --- MODIFIED GROUPING LOGIC ---
                         let port = 'UNKNOWN';
                         if (mode === 'discharge') {
-                            // In Discharge mode: s.port = Port Load (Origin), s.port2 = Port Discharge (Dest)
-                            // User wants to group by Port Discharge
                             port = s.port2 ? s.port2.trim().toUpperCase() : (s.port ? s.port.trim().toUpperCase() : 'UNKNOWN');
                         } else {
-                            // In Loading mode: s.port = Port Discharge
                             port = s.port ? s.port.trim().toUpperCase() : 'UNKNOWN';
                         }
-                        // ------------------------------
                         
                         if(!portData[port]) portData[port] = { total: 0, items: [] };
                         let existingItem = portData[port].items.find(i => i.model === s.model);
@@ -1014,7 +940,6 @@
             const modalBody = document.getElementById('statDetailBody'); const modalTitle = document.getElementById('statDetailTitle');
             modalTitle.innerHTML = `<span class="${colorClass}">${titleText}</span>`;
             
-            // Modified Header Text based on mode
             const groupHeaderText = mode === 'discharge' ? 'Port Disch / Model' : 'Port Disch / Model';
 
             let html = `<div class="overflow-y-auto max-h-[60vh]"><table class="w-full text-sm text-left text-slate-300"><thead class="text-xs uppercase bg-slate-700/50 text-slate-400 sticky top-0"><tr><th class="p-3 text-left">${groupHeaderText}</th><th class="p-3 text-right">Qty</th></tr></thead><tbody class="divide-y divide-slate-700">`;
@@ -1036,114 +961,199 @@
         window.closeStatModal = function() { document.getElementById('statDetailModal').classList.add('hidden'); }
 
         window.showPeriodReport = function() {
-            const v = window.appData.vessels.find(x => x.id === window.activeVesselId); if (!v) return;
-            const reportData = {};
+            // ... (same as provided in context) ...
+            const v = window.appData.vessels.find(x => x.id === window.activeVesselId);
+            if (!v) return;
+
+            const modalBody = document.getElementById('periodReportBody');
+            modalBody.innerHTML = '';
+            
+            // Base Date Calculation
+            let baseDate = new Date();
+            if (v.logs && v.logs.length > 0) {
+                const earliest = v.logs.reduce((min, cur) => cur.timestamp < min ? cur.timestamp : min, v.logs[0].timestamp);
+                baseDate = new Date(earliest);
+            } else if (v.startTime) {
+                const [h, m] = v.startTime.split(':');
+                baseDate.setHours(h, m, 0, 0);
+            }
+            
+            const reportTree = {};
             const periodMeta = {};
 
-            const findPeriodInfoForLog = (log, gangPeriods) => {
-                const logTime = new Date(log.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-                for (let p of gangPeriods) {
-                    const start = p.start;
-                    const end = p.end ? p.end : "Present";
-                    let isMatch = false;
-                    const checkEnd = p.end ? p.end : "23:59";
-                    if (start <= checkEnd) { if (logTime >= start && logTime <= checkEnd) isMatch = true; } 
-                    else { if (logTime >= start || logTime <= checkEnd) isMatch = true; }
-                    
-                    if (isMatch) return { name: p.name, timeRange: `${start} - ${end}` };
-                }
-                return { name: "Unknown", timeRange: "" };
-            };
+            const gangs = window.appData.gangs.filter(g => !(v.disabledGangs || []).includes(g));
 
-            let grandTotal = 0;
-            if (v.logs) {
-                v.logs.forEach(log => {
-                    const gPeriods = (v.gangPeriods && v.gangPeriods[log.gang]) ? v.gangPeriods[log.gang] : v.periods; 
-                    const pInfo = findPeriodInfoForLog(log, gPeriods);
-                    const pName = pInfo.name;
+            gangs.forEach(gangName => {
+                let periods = (v.gangPeriods && v.gangPeriods[gangName]) ? v.gangPeriods[gangName] : [];
+                if(periods.length === 0 && v.logs && v.logs.some(l => l.gang === gangName)) {
+                    periods = [{ name: "P1", start: v.startTime, end: null }];
+                }
+
+                let currentDay = new Date(baseDate);
+                currentDay.setHours(0,0,0,0);
+                let lastEndMs = 0;
+
+                periods.forEach((p, idx) => {
+                    const [sH, sM] = p.start.split(':').map(Number);
+                    let startDt = new Date(currentDay);
+                    startDt.setHours(sH, sM, 0, 0);
+                    if (idx > 0 && startDt.getTime() < lastEndMs) {
+                        startDt.setDate(startDt.getDate() + 1);
+                        currentDay.setDate(currentDay.getDate() + 1);
+                    }
+                    let endDt = null;
+                    if (p.end) {
+                        const [eH, eM] = p.end.split(':').map(Number);
+                        endDt = new Date(startDt);
+                        endDt.setHours(eH, eM, 59, 999);
+                        if (endDt < startDt) endDt.setDate(endDt.getDate() + 1);
+                    } else {
+                        endDt = new Date(); // Present
+                    }
+                    lastEndMs = endDt.getTime();
+
+                    const formatDt = (d) => `${d.getDate()}/${d.getMonth()+1} ${d.toLocaleTimeString('th-TH', {hour:'2-digit', minute:'2-digit'})}`;
+                    const timeStr = `${formatDt(startDt)} - ${p.end ? formatDt(endDt) : 'Now'}`;
+
+                    if(!reportTree[p.name]) reportTree[p.name] = {};
+                    if(!periodMeta[p.name]) periodMeta[p.name] = {};
                     
-                    if (!reportData[pName]) reportData[pName] = {};
-                    if (!reportData[pName][log.gang]) reportData[pName][log.gang] = {};
-                    
-                    // Group by Port
-                    const port = log.port ? log.port.trim().toUpperCase() : "UNKNOWN";
-                    if (!reportData[pName][log.gang][port]) reportData[pName][log.gang][port] = {};
-                    
-                    // Aggregate by Model
-                    if (!reportData[pName][log.gang][port][log.model]) reportData[pName][log.gang][port][log.model] = 0;
-                    
-                    reportData[pName][log.gang][port][log.model] += log.qty;
-                    grandTotal += log.qty;
-                    if (pName !== "Unknown") periodMeta[pName] = pInfo.timeRange;
+                    periodMeta[p.name][gangName] = timeStr;
+
+                    const gangLogs = (v.logs || []).filter(l => 
+                        l.gang === gangName && 
+                        l.timestamp >= startDt.getTime() && 
+                        l.timestamp <= endDt.getTime()
+                    );
+
+                    if (gangLogs.length > 0) {
+                        if(!reportTree[p.name][gangName]) reportTree[p.name][gangName] = { discharge: {}, load: {} };
+                        
+                        gangLogs.forEach(l => {
+                            const typeKey = (l.type === 'discharge') ? 'discharge' : 'load';
+                            const port = l.port ? l.port.trim().toUpperCase() : "UNKNOWN";
+                            const model = l.model || "UNKNOWN";
+
+                            if (!reportTree[p.name][gangName][typeKey][port]) reportTree[p.name][gangName][typeKey][port] = {};
+                            if (!reportTree[p.name][gangName][typeKey][port][model]) reportTree[p.name][gangName][typeKey][port][model] = 0;
+                            
+                            reportTree[p.name][gangName][typeKey][port][model] += l.qty;
+                        });
+                    }
                 });
+            });
+
+            let html = '<div class="space-y-8">';
+            let grandTotal = 0;
+            
+            const sortedPNames = Object.keys(reportTree).sort((a,b) => {
+                return a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'});
+            });
+
+            if (sortedPNames.length === 0) {
+                 html += '<div class="text-center text-slate-500 py-10">No period data available.</div>';
             }
 
-            const body = document.getElementById('periodReportBody'); body.innerHTML = ''; let html = `<div class="space-y-6">`;
-            const sortedPeriods = Object.keys(reportData).sort((a,b) => { if(a === 'Unknown') return 1; if(b === 'Unknown') return -1; return a.localeCompare(b, undefined, {numeric: true, sensitivity: 'base'}); });
-            if (sortedPeriods.length === 0) html += `<div class="text-center text-gray-500 py-10">No loading data yet.</div>`;
-            
-            sortedPeriods.forEach(pName => {
-                let pTotal = 0; const gangs = reportData[pName];
-                const timeRangeDisplay = periodMeta[pName] ? ` <span class="ml-2 text-purple-600 bg-purple-50 px-2 py-0.5 rounded border border-purple-100 font-mono text-xs">${periodMeta[pName]}</span>` : "";
-
-                html += `<div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-                    <div class="bg-gray-100 px-4 py-2 border-b border-gray-200 flex justify-between font-bold text-gray-700 items-center">
-                        <div class="flex items-center">
-                            <span>Period: ${pName}</span>
-                            ${timeRangeDisplay}
-                        </div>
-                        <span class="text-[10px] font-normal text-gray-500">Based on Gang Timings</span>
+            sortedPNames.forEach(pName => {
+                const gangDataMap = reportTree[pName];
+                const gangNames = Object.keys(gangDataMap).sort();
+                
+                html += `
+                <div class="border border-slate-300 rounded-xl overflow-hidden shadow-sm bg-slate-50">
+                    <div class="bg-indigo-600 text-white p-3 font-bold text-lg shadow-md flex items-center">
+                        <span class="bg-indigo-800 px-3 py-1 rounded-lg mr-2 border border-indigo-400">Period: ${pName}</span>
                     </div>
-                    <div class="p-3">`;
-                
-                // Sort Gangs
-                Object.keys(gangs).sort().forEach(g => {
-                    const gColor = getGangColor(g);
-                    const ports = gangs[g];
-                    
-                    // Gang Container
-                    html += `<div class="mb-4 last:mb-0 bg-slate-50 rounded-lg p-2 border border-slate-100">
-                                <div class="font-bold text-sm mb-2 pb-1 border-b border-slate-200 flex items-center" style="color:${gColor}">
-                                    <i class="fa-solid fa-people-group mr-2"></i>${g}
-                                </div>
-                                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">`;
+                    <div class="p-4 space-y-4">
+                `;
 
-                    // Sort Ports
-                    Object.keys(ports).sort().forEach(port => {
-                        const pColor = getPortColor(port);
-                        const models = ports[port];
-                        let portTotal = 0;
-                        Object.values(models).forEach(q => portTotal += q);
+                gangNames.forEach(gName => {
+                    const gColor = getGangColor(gName);
+                    const timeRange = periodMeta[pName][gName] || "Unknown Time";
+                    const ops = gangDataMap[gName];
+
+                    html += `
+                    <div class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="bg-slate-100 px-3 py-2 border-b border-slate-200 flex justify-between items-center">
+                            <div class="flex items-center gap-2">
+                                <span class="font-bold text-sm" style="color:${gColor}"><i class="fa-solid fa-people-group mr-1"></i>${gName}</span>
+                            </div>
+                            <span class="text-xs font-mono text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                <i class="fa-regular fa-clock mr-1"></i>${timeRange}
+                            </span>
+                        </div>
+                        <div class="p-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+                    `;
+
+                    const renderOpBlock = (type, dataObj, colorClass, title, icon) => {
+                        const ports = Object.keys(dataObj).sort();
+                        let blockTotal = 0;
+                        let content = '';
+
+                        ports.forEach(port => {
+                            const models = dataObj[port];
+                            const pColor = getPortColor(port);
+                            let portQty = 0;
+                            let modelList = '';
+
+                            Object.entries(models).forEach(([m, q]) => {
+                                modelList += `<div class="flex justify-between text-[11px] text-slate-600 border-b border-dashed border-slate-100 last:border-0 pb-0.5 mb-0.5"><span>${m}</span><span class="font-bold">${q}</span></div>`;
+                                portQty += q;
+                            });
+                            blockTotal += portQty;
+
+                            content += `
+                            <div class="border border-slate-100 rounded p-2 mb-2 bg-slate-50/50">
+                                <div class="flex justify-between items-center mb-1 border-b border-slate-200 pb-1">
+                                    <div class="font-bold text-[11px]" style="color:${pColor}"><i class="fa-solid fa-anchor mr-1 text-[9px]"></i>${port}</div>
+                                    <div class="text-[10px] font-bold bg-white border px-1.5 rounded">${portQty}</div>
+                                </div>
+                                <div>${modelList}</div>
+                            </div>`;
+                        });
                         
-                        html += `<div class="bg-white rounded border border-slate-200 p-2 text-xs">
-                                    <div class="font-bold mb-1 flex justify-between items-center" style="color:${pColor}">
-                                        <span class="flex items-center gap-1"><i class="fa-solid fa-anchor text-[10px]"></i> ${port}</span>
-                                        <span class="text-black font-extrabold bg-slate-200 px-2 py-0.5 rounded border border-slate-300 shadow-sm">${portTotal}</span>
-                                    </div>
-                                    <div class="space-y-1 pl-1">`;
-                        
-                        for (const [m, qty] of Object.entries(models)) {
-                             html += `<div class="flex justify-between items-center text-slate-600 border-b border-dashed border-slate-100 last:border-0 pb-0.5 last:pb-0">
-                                        <span>${m}</span> 
-                                        <span class="font-bold text-slate-800">${qty}</span>
-                                      </div>`;
-                             pTotal += qty;
-                        }
-                        html += `   </div>
-                                 </div>`;
-                    });
-                    
-                    html += `   </div>
-                             </div>`;
+                        grandTotal += blockTotal;
+
+                        if (blockTotal === 0) return '';
+
+                        return `
+                        <div class="border rounded-lg overflow-hidden border-${colorClass}-200">
+                            <div class="bg-${colorClass}-50 px-2 py-1 text-${colorClass}-700 font-bold text-xs border-b border-${colorClass}-100 flex justify-between">
+                                <span><i class="fa-solid ${icon} mr-1"></i>${title}</span>
+                                <span>${blockTotal}</span>
+                            </div>
+                            <div class="p-2 bg-white h-full">${content}</div>
+                        </div>
+                        `;
+                    };
+
+                    const dischargeHtml = renderOpBlock('discharge', ops.discharge, 'pink', 'Discharge', 'fa-download');
+                    const loadHtml = renderOpBlock('load', ops.load, 'green', 'Loading', 'fa-upload');
+
+                    if (!dischargeHtml && !loadHtml) {
+                         html += `<div class="col-span-2 text-center text-xs text-slate-400 italic py-2">No activity in this period</div>`;
+                    } else {
+                        html += dischargeHtml;
+                        html += loadHtml;
+                    }
+
+                    html += `</div></div>`;
                 });
-                
-                html += `</div><div class="bg-gray-50 px-4 py-2 text-right text-sm font-bold text-gray-600 border-t border-gray-100">Period Total: <span class="text-blue-600 text-lg ml-2">${pTotal}</span></div></div>`;
+
+                html += `</div></div>`;
             });
-            html += `<div class="bg-purple-600 text-white p-4 rounded-lg flex justify-between items-center shadow-lg mt-4"><span class="font-bold text-lg uppercase">Grand Total Loaded</span><span class="font-bold text-3xl">${grandTotal}</span></div></div>`;
-            body.innerHTML = html; document.getElementById('periodReportModal').classList.remove('hidden');
+
+            html += `
+            <div class="bg-slate-900 text-white p-4 rounded-lg flex justify-between items-center shadow-lg sticky bottom-0 z-10 border-t-4 border-blue-500">
+                <span class="font-bold text-sm uppercase text-slate-300">Total Units in Report</span>
+                <span class="font-bold text-2xl font-mono text-green-400">${grandTotal}</span>
+            </div></div>`;
+
+            modalBody.innerHTML = html;
+            document.getElementById('periodReportModal').classList.remove('hidden');
         };
 
         window.showGangDetail = function(gangName) {
+            // ... existing ...
             const v = window.appData.vessels.find(x => x.id === window.activeVesselId); if (!v) return;
             let gp = (v.gangPeriods && v.gangPeriods[gangName]) ? v.gangPeriods[gangName] : (v.periods || []);
             let lastP = gp[gp.length - 1]; let isWorking = lastP && !lastP.end;
@@ -1152,29 +1162,24 @@
             if (isWorking) { badge.className = "text-xs mt-1 px-2 py-0.5 rounded inline-block bg-green-500/20 text-green-400 border border-green-500/50"; badge.innerText = "🟢 Working"; btn.className = "bg-orange-600 hover:bg-orange-500 text-white px-4 py-2 rounded font-bold text-sm shadow-lg ml-auto mr-4 transition transform hover:scale-105"; btn.innerHTML = `<i class="fa-solid fa-pause mr-2"></i>Break`; btn.onclick = () => window.promptGangAction(gangName, 'break'); } 
             else { badge.className = "text-xs mt-1 px-2 py-0.5 rounded inline-block bg-red-500/20 text-red-400 border border-red-500/50"; badge.innerText = "🔴 On Break"; btn.className = "bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded font-bold text-sm shadow-lg ml-auto mr-4 transition transform hover:scale-105"; btn.innerHTML = `<i class="fa-solid fa-play mr-2"></i>Start`; btn.onclick = () => window.promptGangAction(gangName, 'start'); }
             
-            // --- NEW GROUPING LOGIC START (Separated D/L) ---
             let dischargeData = {};
             let loadData = {};
             let totalDischarge = 0;
             let totalLoad = 0;
 
             (v.stocks || []).forEach(s => {
-                // Collect ALL items this gang has worked on
                 if (s.loadedMap && s.loadedMap[gangName] > 0) {
                     const qty = s.loadedMap[gangName];
                     const isDischarge = s.type === 'discharge';
                     
-                    // Determine Group Port based on type (consistent with main view logic)
                     let port = 'UNKNOWN';
                     let targetData = null;
 
                     if (isDischarge) {
-                        // Discharge: Use Port Discharge (Dest) or s.port2
                         port = s.port2 ? s.port2.trim().toUpperCase() : (s.port ? s.port.trim().toUpperCase() : 'UNKNOWN');
                         targetData = dischargeData;
                         totalDischarge += qty;
                     } else {
-                        // Load: Use Port Discharge (Dest) or s.port
                         port = s.port ? s.port.trim().toUpperCase() : 'UNKNOWN';
                         targetData = loadData;
                         totalLoad += qty;
@@ -1182,7 +1187,6 @@
 
                     if (!targetData[port]) targetData[port] = { total: 0, items: [] };
 
-                    // Aggregate by Model
                     let existing = targetData[port].items.find(i => i.model === s.model);
                     if (existing) {
                         existing.qty += qty;
@@ -1198,7 +1202,6 @@
                 modalBody.innerHTML = '';
                 let html = `<div class="overflow-y-auto max-h-[60vh] text-sm text-slate-300">`;
 
-                // Helper to render section
                 const renderSection = (title, icon, colorClass, borderClass, dataObj, totalVal) => {
                     if (totalVal === 0) return '';
                     let sectionHtml = `
@@ -1219,10 +1222,8 @@
                     ports.forEach(port => {
                         const pData = dataObj[port];
                         const pColor = getPortColor(port);
-                        // Port Row
                         sectionHtml += `<tr class="bg-slate-800/30"><td class="p-1.5 pl-3 font-bold flex items-center gap-2 text-xs" style="color: ${pColor}"><span class="w-2 h-2 rounded-full" style="background-color:${pColor}"></span>${port}</td><td class="p-1.5 pr-2 text-right font-bold text-white text-xs">${pData.total}</td></tr>`;
                         
-                        // Model Rows
                         pData.items.sort((a,b) => b.qty - a.qty).forEach(item => {
                             sectionHtml += `<tr class="hover:bg-slate-700/20"><td class="p-1.5 pl-8 text-[11px] text-slate-400 border-l border-dashed border-slate-700">${item.model}</td><td class="p-1.5 pr-2 text-right font-mono text-[11px] ${colorClass}">${item.qty}</td></tr>`;
                         });
@@ -1236,21 +1237,14 @@
                 if (!hasData) {
                     html += `<div class="p-10 text-center text-slate-500 flex flex-col items-center"><i class="fa-solid fa-clipboard-question text-4xl mb-3 opacity-50"></i><p>No items loaded yet by this gang.</p></div>`;
                 } else {
-                    // Render Discharge Section
                     html += renderSection("DISCHARGE (Import)", "fa-download", "text-pink-400", "border-pink-500/30", dischargeData, totalDischarge);
-                    
-                    // Render Loading Section
                     html += renderSection("LOADING (Export)", "fa-upload", "text-green-400", "border-green-500/30", loadData, totalLoad);
-                    
-                    // Grand Total
                     html += `<div class="bg-slate-900 border-t-2 border-slate-600 p-4 flex justify-between items-center sticky bottom-0 z-20 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.3)]"><span class="font-bold text-slate-400 uppercase text-sm">Grand Total (All)</span><span class="text-2xl text-white font-bold">${totalDischarge + totalLoad}</span></div>`;
                 }
                 
                 html += `</div>`;
                 modalBody.innerHTML = html;
             }
-            // --- NEW GROUPING LOGIC END ---
-            
             document.getElementById('gangDetailModal').classList.remove('hidden');
         };
 
@@ -1274,13 +1268,11 @@
             const v = window.appData.vessels.find(x => x.id === window.activeVesselId); if(!v) return window.goToOverview();
             document.getElementById('detailVesselName').innerText = v.name; document.getElementById('detailVesselVoy').innerText = v.voy;
             
-            // --- UPDATED START TIME LOGIC (First Record) ---
             let displayTime = v.startTime;
             let timeBadge = '<span class="text-slate-500 text-[10px] ml-1">(Plan)</span>';
             let timeColor = "text-slate-300";
 
             if (v.logs && v.logs.length > 0) {
-                // Find the very first log entry across ALL gangs and ALL types (Load/Disch)
                 const firstLog = v.logs.reduce((min, cur) => cur.timestamp < min.timestamp ? cur : min, v.logs[0]);
                 const d = new Date(firstLog.timestamp);
                 displayTime = d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
@@ -1290,18 +1282,14 @@
             
             const startTimeEl = document.getElementById('detailStartTime');
             startTimeEl.innerHTML = `<span class="${timeColor}">${displayTime}</span>${timeBadge}`;
-            // -----------------------------------------------
 
-            // --- UPDATE STATS (Including Ship Product) ---
             const s = calculateVesselStats(v, window.currentOpMode);
             document.getElementById('detailTotal').innerText = s.plan; 
             document.getElementById('detailLoaded').innerText = s.loaded; 
             document.getElementById('detailRemaining').innerText = s.remaining;
             
-            // Update Ship Product (Global Rate)
             const prodEl = document.getElementById('detailShipProduct');
             if(prodEl) prodEl.innerText = s.shipProduct || 0;
-            // Update ETC
             const etcEl = document.getElementById('detailETC'); 
             if(etcEl) etcEl.innerText = s.etc;
 
@@ -1309,12 +1297,10 @@
             document.getElementById('tabLoad').className = isLoad ? "flex-1 py-3 rounded-lg font-bold text-sm uppercase transition border-b-4 bg-green-500 text-white border-green-700 shadow-lg shadow-green-500/40 transform scale-105" : "flex-1 py-3 rounded-lg font-bold text-sm uppercase transition border-b-4 bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 opacity-70 hover:opacity-100";
             document.getElementById('tabDischarge').className = !isLoad ? "flex-1 py-3 rounded-lg font-bold text-sm uppercase transition border-b-4 bg-red-600 text-white border-red-800 shadow-lg shadow-red-600/40 transform scale-105" : "flex-1 py-3 rounded-lg font-bold text-sm uppercase transition border-b-4 bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700 opacity-70 hover:opacity-100";
             
-            // Adjust Columns based on Mode
             document.getElementById('colPortHeader1').innerText = isLoad ? 'Port Disch' : 'Port Load';
             document.getElementById('colPortHeader2').innerText = isLoad ? 'Final Port' : 'Port Disch';
             document.getElementById('colLaneHeader').innerText = isLoad ? 'Block' : 'Deck';
 
-            // REMOVED REDUNDANT DECLARATION HERE
             document.getElementById('lblLoaded').innerText = isLoad ? "Loaded" : "Discharged";
             const statCard = document.getElementById('statLoadedCard'); statCard.className = isLoad ? "glass-panel p-3 rounded-xl text-center border-t-4 border-green-500 cursor-pointer hover:bg-slate-700/50 transition active:scale-95" : "glass-panel p-3 rounded-xl text-center border-t-4 border-red-500 cursor-pointer hover:bg-slate-700/50 transition active:scale-95"; 
             document.getElementById('detailLoaded').className = isLoad ? "text-2xl font-bold text-green-400" : "text-2xl font-bold text-red-500"; 
@@ -1322,7 +1308,12 @@
             document.getElementById('detailShipProgress').innerHTML = `<div class="bg-slate-800 rounded-xl overflow-hidden shadow-lg border border-slate-700 p-5 relative"><div class="relative w-full h-2 bg-slate-700 rounded-full"><div class="absolute top-0 left-0 h-full bg-gradient-to-r ${barGradient} rounded-full transition-all duration-1000" style="width: ${visualPct}%"></div><div class="absolute top-1/2 -translate-y-1/2 transition-all duration-1000 z-10 flex flex-col items-center" style="left: ${visualPct}%; transform: translate(-50%, -50%);"><div class="${shipBadgeColor} text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg mb-1 whitespace-nowrap border">${pct}%</div><i class="fa-solid fa-ferry text-2xl text-white drop-shadow-md" style="text-shadow: 0 4px 6px rgba(0,0,0,0.5);"></i></div></div></div>`;
             window.updateLiveTime(); 
             const sel = document.getElementById('currentGangSelect'); const statusDisp = document.getElementById('gangStatusDisplay');
-            const activeGangs = window.appData.gangs.filter(g => !(window.appData.disabledGangs || []).includes(g));
+            
+            // --- UPDATED: Use vessel-specific disabledGangs ---
+            const vesselDisabledGangs = v.disabledGangs || [];
+            const activeGangs = window.appData.gangs.filter(g => !vesselDisabledGangs.includes(g));
+            // -------------------------------------------------
+
             const currentVal = sel.value; sel.innerHTML = '<option value="" disabled selected>-- Select Gang --</option>';
             activeGangs.forEach(g => { const o = document.createElement('option'); o.value = g; o.innerText = g; o.style.color = getGangColor(g); o.style.fontWeight = "bold"; o.style.backgroundColor = "#1e293b"; sel.appendChild(o); });
             if (currentVal && activeGangs.includes(currentVal)) sel.value = currentVal; else sel.value = "";
@@ -1330,18 +1321,15 @@
             const tb = document.getElementById('detailTableBody'); if(tb) tb.innerHTML = ''; const curG = sel ? sel.value : ""; const portStats = {};
             let displayStocks = (v.stocks || []).filter(st => { const itemType = st.type || 'load'; return itemType === window.currentOpMode; });
             
-            // --- UPDATED SORTING LOGIC ---
             displayStocks.sort((a, b) => { 
-                // 1. Check Balance (Done items go to bottom)
                 const remA = a.plan - Object.values(a.loadedMap||{}).reduce((x,y)=>x+y,0);
                 const remB = b.plan - Object.values(b.loadedMap||{}).reduce((x,y)=>x+y,0);
                 const isDoneA = remA === 0;
                 const isDoneB = remB === 0;
 
-                if (isDoneA && !isDoneB) return 1; // A done, B active -> A goes down
-                if (!isDoneA && isDoneB) return -1; // A active, B done -> A goes up
+                if (isDoneA && !isDoneB) return 1; 
+                if (!isDoneA && isDoneB) return -1; 
 
-                // 2. Standard Sort (Port -> Model -> Lane)
                 const portA = (a.port || "ZZZZ").toUpperCase(); 
                 const portB = (b.port || "ZZZZ").toUpperCase(); 
                 if (portA < portB) return -1; 
@@ -1355,35 +1343,29 @@
 
             displayStocks.forEach(st => {
                 const l = Object.values(st.loadedMap||{}).reduce((a,b)=>a+b,0); const rem = st.plan - l;
-                
-                // Determine which port to group by based on mode for Summary Stats
                 let groupPort = st.port;
-                if (window.currentOpMode === 'discharge') groupPort = st.port2; // Use Port Discharge (Dest) for stats
+                if (window.currentOpMode === 'discharge') groupPort = st.port2; 
 
                 const pName = groupPort ? groupPort.trim().toUpperCase() : "UNKNOWN";
                 if(!portStats[pName]) portStats[pName] = { plan: 0, loaded: 0 }; 
                 portStats[pName].plan += st.plan; 
                 portStats[pName].loaded += l;
 
-                // Derive pColor from the Grouping Port (to match summary colors)
                 const pColor = getPortColor(groupPort);
                 const portColorStyle = `color: ${pColor}`;
                 
                 const btnColor = isLoad ? 'bg-green-600 hover:bg-green-500 shadow-green-500/30' : 'bg-red-600 hover:bg-red-500 shadow-red-500/30';
                 
-                // Determine Row Styling
                 let rowClass = "";
                 let textClass = "text-white";
                 let modelColor = "text-white";
                 
                 if (rem === 0) {
-                    // Finished Item Style (Grayed out)
                     rowClass = "bg-gray-900/50 grayscale opacity-50"; 
                     textClass = "text-gray-500";
                     modelColor = "text-gray-500";
                 } else {
-                    // Active Item Style
-                    rowClass = ""; // Default transparent/glass
+                    rowClass = ""; 
                     textClass = "text-white";
                 }
 
@@ -1391,13 +1373,11 @@
             });
             const gg = document.getElementById('detailGangGrid'); if(gg) {
                 gg.innerHTML = '';
-                // Calculate rates per gang
                 const gangMetrics = {};
                 activeGangs.forEach(g => {
                     gangMetrics[g] = calculateGangStats(v, g);
                 });
 
-                // Calculate Ship Product based on current working gangs
                 let currentShipRate = s.shipProduct || 0;
                 
                 const perfHeader = gg.parentElement.querySelector('.flex.justify-between');
@@ -1442,7 +1422,9 @@
             }
         };
 
-        window.initSystem = async function() {
+        function getGangColor(name) { if(!name) return "#94a3b8"; const palette = ["#ef4444", "#22c55e", "#3b82f6", "#f97316", "#a855f7", "#ec4899", "#eab308", "#06b6d4"]; if (window.appData && window.appData.gangs) { const index = window.appData.gangs.indexOf(name); if (index !== -1) return palette[index % palette.length]; } let hash = 0; for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash); return `hsl(${Math.abs(hash) % 360}, 70%, 60%)`; }
+        
+        async function initSystem() {
             try {
                 app = initializeApp(firebaseConfig); auth = getAuth(app); db = getDatabase(app); await signInAnonymously(auth);
                 onAuthStateChanged(auth, (user) => {
@@ -1456,7 +1438,10 @@
                 });
             } catch (e) { console.error("Init Failed:", e); showConnectionError("Config Error"); }
         }
-
+        
+        window.initSystem = initSystem;
+        initSystem(); 
+        
         function updateStatus(isOnline) {
             const el = document.getElementById('connectionStatus'); if(el) {
                 el.innerText = isOnline ? "🟢 Online (RTDB)" : "🔴 Disconnected";
@@ -1469,7 +1454,7 @@
         function validateData() { 
             if(!window.appData.vessels) window.appData.vessels = []; 
             if(!window.appData.gangs) window.appData.gangs = ["Gang 1", "Gang 2", "Gang 3", "Gang 4"]; 
-            if(!window.appData.disabledGangs) window.appData.disabledGangs = []; // Ensure disabledGangs exists
+            if(!window.appData.disabledGangs) window.appData.disabledGangs = []; // Global fallback (not used in new logic)
             if(!window.appData.breaks) window.appData.breaks = []; 
             if(!window.appData.portColors) window.appData.portColors = { "JAPAN": "#22c55e", "IND": "#f97316", "USA": "#3b82f6" }; 
             if(!window.appData.adminAuth) window.appData.adminAuth = { user: "admin", pass: "999999999" };
@@ -1483,10 +1468,8 @@
             window.currentView = 'detail'; 
             window.activeVesselId = vId; 
             
-            // Logic to auto-select tab based on ACTIVE work (Smart Tab Selection)
             const v = window.appData.vessels.find(x => x.id === vId);
             if (v) {
-                // Calculate stats to check what is finished
                 const sDischarge = calculateVesselStats(v, 'discharge');
                 const sLoad = calculateVesselStats(v, 'load');
                 
@@ -1496,13 +1479,11 @@
                 const isDischargeActive = sDischarge.remaining > 0;
                 const isLoadActive = sLoad.remaining > 0;
 
-                // Priority 1: Jump to Active Work immediately
                 if (hasDischargePlan && isDischargeActive) {
                     window.currentOpMode = 'discharge';
                 } else if (hasLoadPlan && isLoadActive) {
                     window.currentOpMode = 'load';
                 } else {
-                    // Priority 2: If both finished (or neither started), prefer Discharge -> Load -> Default
                     if (hasDischargePlan) {
                         window.currentOpMode = 'discharge';
                     } else if (hasLoadPlan) {
@@ -1512,7 +1493,6 @@
                     }
                 }
             } else {
-                // Fallback
                 window.currentOpMode = 'discharge';
             }
 
@@ -1524,7 +1504,6 @@
                 window.currentView = 'admin'; 
                 window.render(); 
             } else {
-                // Show login modal
                 document.getElementById('adminLoginModal').classList.remove('hidden');
                 document.getElementById('adminLoginPass').value = '';
                 document.getElementById('loginErrorMsg').classList.add('hidden');
@@ -1641,7 +1620,6 @@
             const s = (v.stocks || []).find(x => x.id === sId); if (!s) return;
             const loaded = Object.values(s.loadedMap||{}).reduce((a,b)=>a+b,0);
             
-            // VALIDATION: Prevent Over Plan
             if (qty > 0) { 
                 if ((loaded + qty) > s.plan) { 
                     window.showAlert(`⛔ Cannot Submit!\nTotal exceeds Plan limit.\n(Plan: ${s.plan}, Current: ${loaded}, Adding: ${qty})`); 
@@ -1661,22 +1639,31 @@
             inp.value = ''; window.saveData();
         }
 
-        window.addNewGang = function() { const n = document.getElementById('newGangName').value.trim(); if(n&&!window.appData.gangs.includes(n)){window.appData.gangs.push(n); document.getElementById('newGangName').value=''; window.saveData();} }
-        window.deleteGang = function(n) { if(confirm("Del?")) { window.appData.gangs = window.appData.gangs.filter(g=>g!==n); window.saveData(); } }
+        window.addNewGang = function() { const n = document.getElementById('newGangName').value.trim(); if(n&&!window.appData.gangs.includes(n)){window.appData.gangs.push(n); document.getElementById('newGangName').value=''; window.saveData(); window.renderAdminGangList();} }
+        window.deleteGang = function(n) { if(confirm("Del?")) { window.appData.gangs = window.appData.gangs.filter(g=>g!==n); window.saveData(); window.renderAdminGangList(); } }
         
         window.toggleGang = function(name) {
-            if (!window.appData.disabledGangs) window.appData.disabledGangs = [];
-            const idx = window.appData.disabledGangs.indexOf(name);
+            // --- UPDATED: Toggle for specific vessel ---
+            if (!window.activeVesselId) {
+                window.showAlert("Please select a vessel first to manage gangs.");
+                return;
+            }
+            const v = window.appData.vessels.find(x => x.id === window.activeVesselId);
+            if (!v) return;
+
+            if (!v.disabledGangs) v.disabledGangs = [];
+            
+            const idx = v.disabledGangs.indexOf(name);
             if (idx === -1) {
-                window.appData.disabledGangs.push(name);
+                v.disabledGangs.push(name); // Disable
             } else {
-                window.appData.disabledGangs.splice(idx, 1);
+                v.disabledGangs.splice(idx, 1); // Enable
             }
             window.saveData();
-            window.renderAdmin();
+            window.renderAdminGangList();
         }
 
-        window.renameGang = function(o) { const n = prompt("New:", o); if(n&&n!==o){ const i = window.appData.gangs.indexOf(o); window.appData.gangs[i]=n; window.saveData();} }
+        window.renameGang = function(o) { const n = prompt("New:", o); if(n&&n!==o){ const i = window.appData.gangs.indexOf(o); window.appData.gangs[i]=n; window.saveData(); window.renderAdminGangList();} }
         window.addBreak = function() { const n=document.getElementById('breakName').value; const s=document.getElementById('breakStart').value; const e=document.getElementById('breakEnd').value; if(!n||!s||!e) return; window.appData.breaks.push({name:n,start:s,end:e}); window.saveData(); }
         window.deleteBreak = function(i) { if(confirm("Del?")) { window.appData.breaks.splice(i,1); window.saveData(); } }
         
@@ -1711,30 +1698,11 @@
 
         window.renderAdmin = function() {
             const l = document.getElementById('adminVesselList'); l.innerHTML = ''; window.appData.vessels.forEach(v => l.innerHTML += `<li class="flex justify-between bg-gray-100 p-2 rounded text-sm"><span class="font-bold text-blue-800">${v.name}</span><button onclick="deleteVessel(${v.id})" class="text-red-500"><i class="fa-solid fa-trash-can"></i></button></li>`);
-            const s = document.getElementById('adminVesselSelect'); s.innerHTML = '<option value="">-- Select --</option>'; window.appData.vessels.forEach(v => s.innerHTML += `<option value="${v.id}">${v.name}</option>`);
+            const s = document.getElementById('adminVesselSelect'); s.innerHTML = '<option value="">-- No Vessel --</option>'; window.appData.vessels.forEach(v => s.innerHTML += `<option value="${v.id}">${v.name}</option>`);
             if(window.activeVesselId) s.value = window.activeVesselId;
             
-            const gl = document.getElementById('adminGangList'); 
-            gl.innerHTML = ''; 
-            window.appData.gangs.forEach(g => {
-                const isDisabled = (window.appData.disabledGangs || []).includes(g);
-                const opacity = isDisabled ? 'opacity-50' : '';
-                const icon = isDisabled ? 'fa-toggle-off' : 'fa-toggle-on';
-                const iconColor = isDisabled ? 'text-gray-400' : 'text-green-500';
-                
-                gl.innerHTML += `
-                <li class="flex justify-between items-center bg-gray-50 p-2 rounded text-sm ${opacity}">
-                    <span onclick="renameGang('${window.escapeStr(g)}')" class="cursor-pointer font-bold ${isDisabled ? 'line-through text-gray-400' : 'text-slate-800'}">${g}</span>
-                    <div class="flex gap-2 items-center">
-                        <button onclick="toggleGang('${window.escapeStr(g)}')" class="text-2xl ${iconColor} hover:scale-110 transition">
-                            <i class="fa-solid ${icon}"></i>
-                        </button>
-                        <button onclick="deleteGang('${window.escapeStr(g)}')" class="text-red-400 ml-2 hover:text-red-600">
-                            <i class="fa-solid fa-trash-can"></i>
-                        </button>
-                    </div>
-                </li>`;
-            });
+            // Render Gang List (Dependent on vessel selection)
+            window.renderAdminGangList();
 
             const bl = document.getElementById('adminBreakList'); bl.innerHTML = ''; window.appData.breaks.forEach((b,i) => bl.innerHTML += `<li class="flex justify-between bg-orange-50 p-2 rounded text-sm"><span>${b.name}: ${b.start}-${b.end}</span><button onclick="deleteBreak(${i})" class="text-red-400"><i class="fa-solid fa-trash-can"></i></button></li>`);
             const pcl = document.getElementById('adminPortColorList'); pcl.innerHTML = ''; 
@@ -1752,6 +1720,66 @@
             window.renderAdminStockTable();
         }
 
+        // --- NEW: Handle Vessel Change in Admin ---
+        window.handleAdminVesselChange = function() {
+            const vId = document.getElementById('adminVesselSelect').value;
+            window.activeVesselId = vId ? parseInt(vId) : null;
+            window.renderAdminStockTable();
+            window.renderAdminGangList();
+        }
+
+        // --- NEW: Render Gang List based on Vessel ---
+        window.renderAdminGangList = function() {
+            const gl = document.getElementById('adminGangList'); 
+            const vesselNameEl = document.getElementById('adminGangVesselName');
+            const helpText = document.getElementById('adminGangHelpText');
+            const newGangInput = document.getElementById('newGangName');
+            
+            gl.innerHTML = ''; 
+            
+            let currentVessel = null;
+            if (window.activeVesselId) {
+                currentVessel = window.appData.vessels.find(v => v.id === window.activeVesselId);
+            }
+
+            if (currentVessel) {
+                // Active Vessel Mode
+                vesselNameEl.innerText = `For: ${currentVessel.name}`;
+                vesselNameEl.classList.remove('hidden');
+                helpText.classList.add('hidden');
+                newGangInput.disabled = false;
+                
+                // Ensure vessel has disabledGangs array
+                if (!currentVessel.disabledGangs) currentVessel.disabledGangs = [];
+
+                window.appData.gangs.forEach(g => {
+                    const isDisabled = currentVessel.disabledGangs.includes(g);
+                    const opacity = isDisabled ? 'opacity-50' : '';
+                    const icon = isDisabled ? 'fa-toggle-off' : 'fa-toggle-on';
+                    const iconColor = isDisabled ? 'text-gray-400' : 'text-green-500';
+                    const labelColor = isDisabled ? 'text-gray-400 line-through' : 'text-slate-800';
+                    
+                    gl.innerHTML += `
+                    <li class="flex justify-between items-center bg-gray-50 p-2 rounded text-sm border border-slate-100 ${opacity}">
+                        <span onclick="renameGang('${window.escapeStr(g)}')" class="cursor-pointer font-bold ${labelColor}">${g}</span>
+                        <div class="flex gap-2 items-center">
+                            <button onclick="toggleGang('${window.escapeStr(g)}')" class="text-2xl ${iconColor} hover:scale-110 transition focus:outline-none">
+                                <i class="fa-solid ${icon}"></i>
+                            </button>
+                            <button onclick="deleteGang('${window.escapeStr(g)}')" class="text-red-400 ml-2 hover:text-red-600 focus:outline-none">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        </div>
+                    </li>`;
+                });
+            } else {
+                // No Vessel Selected
+                vesselNameEl.classList.add('hidden');
+                helpText.classList.remove('hidden');
+                gl.innerHTML = '<li class="text-center text-gray-400 italic p-4">Please select a vessel to manage gangs.</li>';
+            }
+        }
+
         window.renderAdminStockTable = function() {
             const b = document.getElementById('adminStockBody'); b.innerHTML = ''; const vId = parseInt(document.getElementById('adminVesselSelect').value);
             if(!vId) return; window.activeVesselId = vId; const v = window.appData.vessels.find(x => x.id === vId);
@@ -1764,8 +1792,6 @@
                 b.innerHTML += `<tr><td class="p-3">${typeBadge}</td><td class="p-3 font-bold">${s.model}</td><td class="p-3 font-bold" style="color:${pColor}">${s.port||'-'}</td><td class="p-3 font-bold text-gray-500">${s.port2||'-'}</td><td class="p-3 text-right">${s.plan}</td><td class="p-3 text-center flex gap-2 justify-center"><button onclick="openEditStock(${v.id},${s.id})" class="text-blue-500 hover:text-blue-700 bg-blue-100 p-1 rounded"><i class="fa-solid fa-pen"></i></button><button onclick="deleteStock(${v.id},${s.id})" class="text-red-500 hover:text-red-700 bg-red-100 p-1 rounded"><i class="fa-solid fa-trash"></i></button></td></tr>`;
             }); }
         }
-
-        // --- NEW CALCULATIONS START ---
 
         function parseTimeWithDayWrap(timeStr, refZeroDate, prevTimestamp) {
             if(!timeStr) return prevTimestamp > 0 ? prevTimestamp : refZeroDate.getTime();
@@ -1782,9 +1808,7 @@
             return ts;
         }
 
-        // Helper to get total net working time for a single gang
         function calculateGangStats(v, gangName) {
-            // 1. Calculate Total Net Working Time
             let baseDate = new Date();
             if (v.logs && v.logs.length > 0) {
                 const sortedLogs = [...v.logs].sort((a, b) => a.timestamp - b.timestamp);
@@ -1815,7 +1839,6 @@
                 });
             }
 
-            // 2. Calculate Total Qty (All time) for this gang
             let totalQty = 0;
             if (v.logs) {
                 v.logs.forEach(l => {
@@ -1823,10 +1846,7 @@
                 });
             }
 
-            // 3. Calculate Rate (Units/Hour)
-            // Use 0 if working time is insignificant (< 1 min) to prevent skew
             let rate = 0;
-            // Support extrapolation from 1 minute (60000ms) onwards
             if (netTimeMs >= 60000) { 
                 const hours = netTimeMs / (1000 * 60 * 60);
                 rate = Math.round(totalQty / hours);
@@ -1844,7 +1864,6 @@
                 }
             });
 
-            // Calculate Global Stats
             let totalPlan = 0, totalLoaded = 0;
             (v.stocks || []).forEach(s => {
                 totalPlan += s.plan;
@@ -1855,29 +1874,23 @@
             let shipProduct = 0;
             const remainingGlobal = totalPlan - totalLoaded;
 
-            // --- REFINED SHIP PRODUCT LOGIC (GROSS) ---
-            // Formula: Total Loaded / (Current Time - Start Time)
             if (totalLoaded > 0 && v.logs && v.logs.length > 0) {
-                // v.logs[0] is newest, v.logs[length-1] is oldest (Start)
                 const firstLog = v.logs[v.logs.length - 1]; 
                 const startTime = firstLog.timestamp;
                 let endTime = Date.now();
 
-                // If fully complete, stop the clock at the last move
                 if (totalPlan > 0 && remainingGlobal <= 0) {
                     const lastLog = v.logs[0];
                     endTime = lastLog.timestamp;
                 }
 
                 const durationMs = endTime - startTime;
-                // Avoid division by zero or tiny duration (e.g. < 1 min)
                 if (durationMs > 60000) {
                     const durationHrs = durationMs / (1000 * 60 * 60);
                     shipProduct = Math.round(totalLoaded / durationHrs);
                 }
             }
 
-            // --- REFINED ETC LOGIC ---
             if (totalLoaded > 0 && remainingGlobal > 0) {
                 if (shipProduct > 0) {
                     const timeToFinishHours = remainingGlobal / shipProduct;
@@ -1888,7 +1901,7 @@
                     const tStr = etcDate.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
                     etc = `${dStr} ${tStr}`;
                 } else {
-                    etc = "Calc..."; // No rate yet
+                    etc = "Calc..."; 
                 }
             } else if (totalPlan > 0 && remainingGlobal <= 0) {
                 etc = "Done";
@@ -1898,7 +1911,6 @@
 
             return { plan: p, loaded: l, remaining: p - l, etc, shipProduct };
         }
-        // --- NEW CALCULATIONS END ---
 
         function renderOverview() {
             const g = document.getElementById('vesselGrid'); g.innerHTML = ''; if(window.appData.vessels.length===0) { g.innerHTML='<div class="text-center text-gray-500 col-span-full py-10">No Active Vessels</div>'; return;}
@@ -1912,7 +1924,11 @@
                 
                 let workingCount = 0; let breakCount = 0; 
                 
-                const activeGangs = window.appData.gangs.filter(gang => !(window.appData.disabledGangs || []).includes(gang));
+                // --- UPDATED: use v.disabledGangs ---
+                const vesselDisabledGangs = v.disabledGangs || [];
+                const activeGangs = window.appData.gangs.filter(gang => !vesselDisabledGangs.includes(gang));
+                // ------------------------------------
+
                 activeGangs.forEach(g => { const gd = window.getGangData(v, g); if (gd.status === 'working') workingCount++; else breakCount++; });
                 
                 const sTotal = calculateVesselStats(v); 
@@ -1928,7 +1944,6 @@
                 
                 if (isComplete) {
                     let completeTimeStr = "Unknown";
-                    // Use logs for finish time reference
                     if (v.logs && v.logs.length > 0) { 
                         const sortedLogs = [...v.logs].sort((a, b) => a.timestamp - b.timestamp);
                         const lastLog = sortedLogs[sortedLogs.length - 1];
@@ -1979,10 +1994,8 @@
                 if (hasDischarge) barsHtml += renderBar(sDischarge, 'discharge');
                 if (hasLoad || (!hasDischarge)) barsHtml += renderBar(sLoad, 'load');
 
-                // --- NEW DYNAMIC STATS BLOCK START ---
                 let statsBlockHtml = '<div class="p-4 border-t border-slate-700/50 flex flex-col gap-3">';
 
-                // Helper to render stats grid
                 const renderStatsGrid = (stats, title, colorName) => {
                     return `
                     <div>
@@ -2011,17 +2024,15 @@
                 }
 
                 if (hasLoad) {
-                    if (hasDischarge) statsBlockHtml += `<div class="border-t border-slate-700/30"></div>`; // Separator
-                    statsBlockHtml += renderStatsGrid(sLoad, 'LOADING', 'green'); // Green/Blue theme, using green for success
+                    if (hasDischarge) statsBlockHtml += `<div class="border-t border-slate-700/30"></div>`; 
+                    statsBlockHtml += renderStatsGrid(sLoad, 'LOADING', 'green'); 
                 }
 
-                // Fallback for empty/new vessel
                 if (!hasLoad && !hasDischarge) {
                     statsBlockHtml += renderStatsGrid(sTotal, 'TOTAL', 'green');
                 }
 
                 statsBlockHtml += '</div>';
-                // --- NEW DYNAMIC STATS BLOCK END ---
 
                 g.innerHTML += `
                 <div onclick="goToDetail(${v.id})" class="${cardClass}">
@@ -2051,8 +2062,8 @@
                 </div>`;
             });
         }
-        function getGangColor(name) { if(!name) return "#94a3b8"; const palette = ["#ef4444", "#22c55e", "#3b82f6", "#f97316", "#a855f7", "#ec4899", "#eab308", "#06b6d4"]; if (window.appData && window.appData.gangs) { const index = window.appData.gangs.indexOf(name); if (index !== -1) return palette[index % palette.length]; } let hash = 0; for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash); return `hsl(${Math.abs(hash) % 360}, 70%, 60%)`; }
-        window.initSystem(); setInterval(() => { if(window.currentView==='overview') renderOverview(); if(window.currentView==='detail') window.updateLiveTime(); }, 1000);
+        
+        setInterval(() => { if(window.currentView==='overview') renderOverview(); if(window.currentView==='detail') window.updateLiveTime(); }, 1000);
     </script>
 </body>
 </html>

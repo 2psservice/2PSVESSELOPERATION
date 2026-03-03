@@ -203,7 +203,21 @@
 
         <!-- VIEW 1: DASHBOARD OVERVIEW -->
         <div id="view-overview" class="hidden fade-in">
-            <h2 class="text-2xl font-bold mb-6 text-white border-l-4 border-blue-500 pl-4">Active Vessels Overview</h2>
+            <!-- Month Filter Bar -->
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+                <h2 class="text-2xl font-bold text-white border-l-4 border-blue-500 pl-4">Active Vessels Overview</h2>
+                <div class="flex items-center gap-2 bg-slate-800 border border-slate-600 rounded-xl px-4 py-2 shadow">
+                    <i class="fa-solid fa-calendar-days text-blue-400"></i>
+                    <label class="text-xs text-slate-400 uppercase font-bold tracking-wider">เดือน</label>
+                    <input type="month" id="monthFilterInput"
+                        class="bg-slate-700 text-white text-sm font-bold border border-slate-500 rounded-lg px-3 py-1 focus:border-blue-400 focus:outline-none cursor-pointer"
+                        onchange="window.onMonthFilterChange()">
+                    <button onclick="window.onMonthFilterChange('today')"
+                        class="text-xs bg-blue-600 hover:bg-blue-500 text-white px-2 py-1 rounded font-bold transition">
+                        ปัจจุบัน
+                    </button>
+                </div>
+            </div>
             <div id="vesselGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
         </div>
 
@@ -2147,9 +2161,60 @@
             return { plan: p, loaded: l, remaining: p - l, etc, shipProduct, durationStr };
         }
 
+        window.onMonthFilterChange = function (forceToday) {
+            const inp = document.getElementById('monthFilterInput');
+            if (forceToday || !inp) {
+                const now = new Date();
+                const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+                if (inp) inp.value = ym;
+                window.selectedFilterMonth = ym;
+            } else {
+                window.selectedFilterMonth = inp.value;
+            }
+            renderOverview();
+        };
+
         function renderOverview() {
-            const g = document.getElementById('vesselGrid'); g.innerHTML = ''; if (window.appData.vessels.length === 0) { g.innerHTML = '<div class="text-center text-gray-500 col-span-full py-10">No Active Vessels</div>'; return; }
-            const sortedVessels = [...window.appData.vessels].sort((a, b) => b.id - a.id);
+            // Init month filter default
+            if (!window.selectedFilterMonth) {
+                const now = new Date();
+                window.selectedFilterMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            }
+            const inp = document.getElementById('monthFilterInput');
+            if (inp && inp.value !== window.selectedFilterMonth) inp.value = window.selectedFilterMonth;
+
+            const [filterYear, filterMonth] = window.selectedFilterMonth.split('-').map(Number);
+
+            // Filter vessels: vessel created in this month OR has logs in this month
+            const allVessels = window.appData.vessels || [];
+            const filteredVessels = allVessels.filter(v => {
+                // Check vessel creation month (id is a timestamp)
+                const created = new Date(v.id);
+                if (created.getFullYear() === filterYear && (created.getMonth() + 1) === filterMonth) return true;
+                // Check if any logs fall in this month
+                if (v.logs && v.logs.length > 0) {
+                    return v.logs.some(l => {
+                        const d = new Date(l.timestamp);
+                        return d.getFullYear() === filterYear && (d.getMonth() + 1) === filterMonth;
+                    });
+                }
+                return false;
+            });
+
+            const g = document.getElementById('vesselGrid');
+            g.innerHTML = '';
+
+            if (allVessels.length === 0) {
+                g.innerHTML = '<div class="text-center text-gray-500 col-span-full py-10"><i class="fa-solid fa-ship text-4xl mb-3 opacity-30 block"></i>ยังไม่มีเรือในระบบ</div>';
+                return;
+            }
+            if (filteredVessels.length === 0) {
+                const monthName = new Date(filterYear, filterMonth - 1, 1).toLocaleString('th-TH', { month: 'long', year: 'numeric' });
+                g.innerHTML = `<div class="text-center text-slate-500 col-span-full py-14"><i class="fa-solid fa-calendar-xmark text-5xl mb-4 opacity-30 block text-blue-400"></i><p class="text-lg font-bold text-slate-400">ไม่มีเรือในเดือน ${monthName}</p><p class="text-sm text-slate-600 mt-1">ลองเลือกเดือนอื่น หรือกดปุ่ม "ปัจจุบัน"</p></div>`;
+                return;
+            }
+
+            const sortedVessels = [...filteredVessels].sort((a, b) => b.id - a.id);
             sortedVessels.forEach(v => {
                 const sLoad = calculateVesselStats(v, 'load');
                 const sDischarge = calculateVesselStats(v, 'discharge');

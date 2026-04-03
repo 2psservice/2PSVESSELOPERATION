@@ -745,7 +745,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
+        import { getDatabase, ref, set, onValue, update, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC-T8p6JaOw-1tdPxxLuxORuvQNAsZ9dUE",
@@ -765,6 +765,7 @@
         window.isAdminLoggedIn = false;
 
         let app, auth, db;
+        let _isSaving = false; // flag to prevent onValue from overwriting local data during save
 
         window.escapeStr = function (str) { if (!str) return ''; return str.toString().replace(/'/g, "\\'"); }
 
@@ -1671,7 +1672,15 @@
                     window.user = user; if (user) {
                         onValue(ref(db, 'roro_v1/master'), (snapshot) => {
                             document.getElementById('app-loader').classList.add('hidden'); updateStatus(true);
-                            const data = snapshot.val(); if (data) { window.appData = data; validateData(); } else { window.saveData(); }
+                            const data = snapshot.val();
+                            if (data) {
+                                if (_isSaving) {
+                                    // While saving, don't overwrite local data — just skip
+                                    return;
+                                }
+                                window.appData = data; validateData();
+                                autoCleanupOldData();
+                            } else { window.saveData(); }
                             if (document.activeElement.tagName !== 'INPUT') window.render(); else window.updateLiveTime();
                         }, (err) => { console.error("RTDB Error", err); showConnectionError("Network Error"); });
                     }
@@ -1700,7 +1709,49 @@
             if (!window.appData.adminAuth) window.appData.adminAuth = { user: "admin", pass: "999999999" };
         }
 
-        window.saveData = async function () { if (window.user && db) { try { await set(ref(db, 'roro_v1/master'), window.appData); } catch (e) { console.error("Save Error", e); window.showAlert("Save Failed: " + e.message); } } else { window.showAlert("Offline! Data not saved."); } };
+        // Auto-cleanup: delete vessels older than 3 months
+        let _hasRunCleanup = false;
+        function autoCleanupOldData() {
+            if (_hasRunCleanup) return; // run only once per session
+            _hasRunCleanup = true;
+            if (!window.appData.vessels || window.appData.vessels.length === 0) return;
+
+            const THREE_MONTHS_MS = 90 * 24 * 60 * 60 * 1000; // ~3 months
+            const cutoff = Date.now() - THREE_MONTHS_MS;
+
+            const before = window.appData.vessels.length;
+            const removed = window.appData.vessels.filter(v => v.id < cutoff);
+            window.appData.vessels = window.appData.vessels.filter(v => v.id >= cutoff);
+            const after = window.appData.vessels.length;
+
+            if (before > after) {
+                console.log(`[Auto-Cleanup] Removed ${before - after} vessel(s) older than 3 months:`,
+                    removed.map(v => `${v.name} (${new Date(v.id).toLocaleDateString('th-TH')})`));
+                if (window.activeVesselId && !window.appData.vessels.find(v => v.id === window.activeVesselId)) {
+                    window.activeVesselId = null;
+                    window.currentView = 'overview';
+                }
+                window.saveData();
+            }
+        }
+
+        window.saveData = async function () {
+            if (window.user && db) {
+                _isSaving = true;
+                try {
+                    await set(ref(db, 'roro_v1/master'), window.appData);
+                } catch (e) {
+                    console.error("Save Error", e);
+                    window.showAlert("Save Failed: " + e.message);
+                } finally {
+                    _isSaving = false;
+                    // Re-render since onValue was skipped during save
+                    window.render();
+                }
+            } else {
+                window.showAlert("Offline! Data not saved.");
+            }
+        };
 
         window.goToOverview = function () { window.currentView = 'overview'; window.activeVesselId = null; window.render(); }
 
@@ -1851,32 +1902,66 @@
         }
         window.deleteStock = function (vId, sId) { const v = window.appData.vessels.find(x => x.id === vId); if (v) { v.stocks = (v.stocks || []).filter(s => s.id !== sId); window.saveData(); window.renderAdminStockTable(); } }
 
-        window.submitLoad = function (vId, sId, sign = 1) {
+        window.submitLoad = async function (vId, sId, sign = 1) {
             const gangName = document.getElementById('currentGangSelect').value; if (!gangName) { window.showAlert("❗ Select Gang First!"); return; }
             const v = window.appData.vessels.find(x => x.id === vId);
             const gStatus = (v.gangPeriods && v.gangPeriods[gangName]) ? v.gangPeriods[gangName][v.gangPeriods[gangName].length - 1] : (v.periods ? v.periods[v.periods.length - 1] : null);
             if (gStatus && gStatus.end) { window.showAlert(`⛔ ${gangName} is on BREAK! Please Start Work first.`); return; }
             const inp = document.getElementById(`inp_load_${sId}`); let qty = parseInt(inp.value); if (!qty) return; qty = Math.abs(qty) * sign;
-            const s = (v.stocks || []).find(x => x.id === sId); if (!s) return;
-            const loaded = Object.values(s.loadedMap || {}).reduce((a, b) => a + b, 0);
+            inp.value = '';
 
-            if (qty > 0) {
-                if ((loaded + qty) > s.plan) {
-                    window.showAlert(`⛔ Cannot Submit!\nTotal exceeds Plan limit.\n(Plan: ${s.plan}, Current: ${loaded}, Adding: ${qty})`);
-                    return;
+            if (!window.user || !db) { window.showAlert("Offline! Data not saved."); return; }
+
+            // Find vessel index and stock index for the Firebase path
+            const vesselIndex = window.appData.vessels.findIndex(x => x.id === vId);
+            if (vesselIndex === -1) return;
+            const stockIndex = (window.appData.vessels[vesselIndex].stocks || []).findIndex(x => x.id === sId);
+            if (stockIndex === -1) return;
+
+            const masterRef = ref(db, 'roro_v1/master');
+            _isSaving = true;
+            try {
+                const result = await runTransaction(masterRef, (currentData) => {
+                    if (!currentData) return currentData;
+
+                    const vessel = currentData.vessels[vesselIndex];
+                    if (!vessel) return; // abort transaction
+                    const stock = (vessel.stocks || [])[stockIndex];
+                    if (!stock) return; // abort
+
+                    if (!stock.loadedMap) stock.loadedMap = {};
+                    if (!stock.loadedMap[gangName]) stock.loadedMap[gangName] = 0;
+
+                    const loaded = Object.values(stock.loadedMap).reduce((a, b) => a + b, 0);
+
+                    // Validation inside transaction (using fresh server data)
+                    if (qty > 0 && (loaded + qty) > stock.plan) return; // abort
+                    if (qty < 0 && (loaded + qty) < 0) return; // abort
+                    if (qty < 0 && (stock.loadedMap[gangName] + qty) < 0) return; // abort
+
+                    stock.loadedMap[gangName] += qty;
+
+                    if (!vessel.logs) vessel.logs = [];
+                    vessel.logs.unshift({
+                        timestamp: Date.now(), stockId: sId, gang: gangName, qty: qty,
+                        model: stock.model, lane: stock.lane, port: stock.port, type: stock.type || 'load'
+                    });
+
+                    return currentData;
+                });
+
+                // Sync local data from the committed transaction result
+                if (result.committed && result.snapshot.val()) {
+                    window.appData = result.snapshot.val();
+                    validateData();
+                    window.render();
                 }
-            } else {
-                if ((loaded + qty) < 0) {
-                    window.showAlert("Cannot reduce below 0!");
-                    return;
-                }
+            } catch (e) {
+                console.error("Transaction Error", e);
+                window.showAlert("Save Failed: " + e.message);
+            } finally {
+                _isSaving = false;
             }
-
-            if (!s.loadedMap) s.loadedMap = {}; if (!s.loadedMap[gangName]) s.loadedMap[gangName] = 0;
-            if (qty < 0 && (s.loadedMap[gangName] + qty) < 0) { window.showAlert(`Cannot reduce! ${gangName} loaded only ${s.loadedMap[gangName]}.`); return; }
-            s.loadedMap[gangName] += qty; if (!v.logs) v.logs = [];
-            v.logs.unshift({ timestamp: Date.now(), stockId: sId, gang: gangName, qty: qty, model: s.model, lane: s.lane, port: s.port, type: s.type || 'load' });
-            inp.value = ''; window.saveData();
         }
 
         window.addNewGang = function () { const n = document.getElementById('newGangName').value.trim(); if (n && !window.appData.gangs.includes(n)) { window.appData.gangs.push(n); document.getElementById('newGangName').value = ''; window.saveData(); window.renderAdminGangList(); } }
@@ -2214,7 +2299,16 @@
                 return;
             }
 
-            const sortedVessels = [...filteredVessels].sort((a, b) => b.id - a.id);
+            const sortedVessels = [...filteredVessels].sort((a, b) => {
+                const sA = calculateVesselStats(a);
+                const sB = calculateVesselStats(b);
+                const completeA = sA.plan > 0 && sA.remaining <= 0;
+                const completeB = sB.plan > 0 && sB.remaining <= 0;
+                // Working vessels first, complete vessels at the bottom
+                if (completeA !== completeB) return completeA ? 1 : -1;
+                // Within same group, newest first
+                return b.id - a.id;
+            });
             sortedVessels.forEach(v => {
                 const sLoad = calculateVesselStats(v, 'load');
                 const sDischarge = calculateVesselStats(v, 'discharge');

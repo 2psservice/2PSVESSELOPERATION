@@ -6,10 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ครบรอบ 20 ปี 2PS SERVICE</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js" defer></script>
     <!-- Excel Parser Library with Style Support -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js" defer></script>
 
     <style>
         body {
@@ -766,6 +766,7 @@
 
         let app, auth, db;
         let _isSaving = false; // flag to prevent onValue from overwriting local data during save
+        let _dataDirty = true; // flag to avoid re-rendering when nothing changed
 
         window.escapeStr = function (str) { if (!str) return ''; return str.toString().replace(/'/g, "\\'"); }
 
@@ -1544,46 +1545,43 @@
             activeGangs.forEach(g => { const o = document.createElement('option'); o.value = g; o.innerText = g; o.style.color = getGangColor(g); o.style.fontWeight = "bold"; o.style.backgroundColor = "#1e293b"; sel.appendChild(o); });
             if (currentVal && activeGangs.includes(currentVal)) sel.value = currentVal; else sel.value = "";
             if (sel.value) { const gColor = getGangColor(sel.value); sel.style.color = gColor; sel.style.borderColor = gColor; sel.style.boxShadow = `0 0 10px ${gColor}40`; const gd = window.getGangData(v, sel.value); statusDisp.classList.remove('hidden'); if (gd.status === 'break') { statusDisp.innerHTML = `<i class="fa-solid fa-mug-hot mr-1"></i> ${sel.value} is on <b>BREAK</b>`; statusDisp.className = "mt-2 text-center text-xs text-red-300 bg-red-900/30 border border-red-800 p-2 rounded animate-pulse"; } else { statusDisp.innerHTML = `<i class="fa-solid fa-bolt mr-1"></i> ${sel.value} is <b>WORKING</b>`; statusDisp.className = "mt-2 text-center text-xs text-green-300 bg-green-900/30 border border-green-800 p-2 rounded"; } } else { sel.style.color = "white"; sel.style.borderColor = "rgb(59 130 246)"; sel.style.boxShadow = "none"; statusDisp.classList.add('hidden'); }
-            const tb = document.getElementById('detailTableBody'); if (tb) tb.innerHTML = ''; const curG = sel ? sel.value : ""; const portStats = {};
+            const tb = document.getElementById('detailTableBody'); let _tbHtml = ''; const curG = sel ? sel.value : ""; const portStats = {};
             let displayStocks = (v.stocks || []).filter(st => { const itemType = st.type || 'load'; return itemType === window.currentOpMode; });
 
-            // --- SORTING LOGIC ---
+            // --- SORTING LOGIC (pre-compute loaded/remaining to avoid recalc in comparator) ---
+            const _stockLoaded = new Map();
+            displayStocks.forEach(st => {
+                _stockLoaded.set(st.id, Object.values(st.loadedMap || {}).reduce((x, y) => x + y, 0));
+            });
             displayStocks.sort((a, b) => {
-                const remA = a.plan - Object.values(a.loadedMap || {}).reduce((x, y) => x + y, 0);
-                const remB = b.plan - Object.values(b.loadedMap || {}).reduce((x, y) => x + y, 0);
-                const isDoneA = remA === 0;
-                const isDoneB = remB === 0;
+                const isDoneA = (a.plan - _stockLoaded.get(a.id)) === 0;
+                const isDoneB = (b.plan - _stockLoaded.get(b.id)) === 0;
 
-                // 1. Completion Status (Done items at bottom)
                 if (isDoneA && !isDoneB) return 1;
                 if (!isDoneA && isDoneB) return -1;
 
-                // 2. Port 1 (Discharge / Load)
                 const portA = (a.port || "ZZZZ").toUpperCase();
                 const portB = (b.port || "ZZZZ").toUpperCase();
                 if (portA < portB) return -1;
                 if (portA > portB) return 1;
 
-                // 3. Port 2 (Final / Secondary) - NEW ADDITION
                 const port2A = (a.port2 || "ZZZZ").toUpperCase();
                 const port2B = (b.port2 || "ZZZZ").toUpperCase();
                 if (port2A < port2B) return -1;
                 if (port2A > port2B) return 1;
 
-                // 4. Model
                 const modelA = (a.model || "").toUpperCase();
                 const modelB = (b.model || "").toUpperCase();
                 if (modelA < modelB) return -1;
                 if (modelA > modelB) return 1;
 
-                // 5. Lane
                 if ((a.lane || "") < (b.lane || "")) return -1;
                 if ((a.lane || "") > (b.lane || "")) return 1;
                 return 0;
             });
 
             displayStocks.forEach(st => {
-                const l = Object.values(st.loadedMap || {}).reduce((a, b) => a + b, 0); const rem = st.plan - l;
+                const l = _stockLoaded.get(st.id); const rem = st.plan - l;
                 let groupPort = st.port;
                 if (window.currentOpMode === 'discharge') groupPort = st.port2;
 
@@ -1610,10 +1608,10 @@
                     textClass = "text-white";
                 }
 
-                tb.innerHTML += `<tr class="${rowClass} transition-all duration-500" style="border-left: 4px solid ${pColor}"><td class="p-3 text-xs font-bold uppercase min-w-[100px]" style="${rem === 0 ? 'color:gray' : portColorStyle}">${st.port || '-'}</td><td class="p-3 text-xs font-bold text-gray-400 min-w-[100px]">${st.port2 || '-'}</td><td class="p-3 font-bold ${modelColor} min-w-[70px]">${st.model}</td><td class="p-3 text-blue-300 font-mono text-xs min-w-[70px]">${st.lane}</td><td class="p-3 text-center bg-slate-800/30 border-x border-slate-700 min-w-[140px]">${rem > 0 || l > 0 ? `<div class="flex gap-1 justify-center items-center"><button onclick="submitLoad(${v.id},${st.id}, -1)" class="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-l text-sm shadow-lg transform active:scale-95 transition"><i class="fa-solid fa-minus"></i></button><input type="number" id="inp_load_${st.id}" class="w-16 bg-slate-700 text-white text-center border-y border-slate-500 py-1.5 text-base font-bold shadow-inner" placeholder="#" onkeypress="if(event.key==='Enter') submitLoad(${v.id}, ${st.id})"><button onclick="submitLoad(${v.id},${st.id}, 1)" class="${btnColor} text-white px-3 py-1.5 rounded-r text-sm shadow-lg transform active:scale-95 transition"><i class="fa-solid fa-plus"></i></button></div>` : '<span class="text-green-500 text-xs font-bold"><i class="fa-solid fa-check mr-1"></i>DONE</span>'}</td><td class="p-3 text-center ${textClass}">${st.plan}</td><td class="p-3 text-center font-bold text-green-400 bg-green-900/20 border-x border-slate-700 text-lg">${l}</td><td class="p-3 text-center ${rem === 0 ? 'text-green-500 font-bold' : 'text-orange-400 font-bold'}">${rem}</td></tr>`;
+                _tbHtml += `<tr class="${rowClass} transition-all duration-500" style="border-left: 4px solid ${pColor}"><td class="p-3 text-xs font-bold uppercase min-w-[100px]" style="${rem === 0 ? 'color:gray' : portColorStyle}">${st.port || '-'}</td><td class="p-3 text-xs font-bold text-gray-400 min-w-[100px]">${st.port2 || '-'}</td><td class="p-3 font-bold ${modelColor} min-w-[70px]">${st.model}</td><td class="p-3 text-blue-300 font-mono text-xs min-w-[70px]">${st.lane}</td><td class="p-3 text-center bg-slate-800/30 border-x border-slate-700 min-w-[140px]">${rem > 0 || l > 0 ? `<div class="flex gap-1 justify-center items-center"><button onclick="submitLoad(${v.id},${st.id}, -1)" class="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-l text-sm shadow-lg transform active:scale-95 transition"><i class="fa-solid fa-minus"></i></button><input type="number" id="inp_load_${st.id}" class="w-16 bg-slate-700 text-white text-center border-y border-slate-500 py-1.5 text-base font-bold shadow-inner" placeholder="#" onkeypress="if(event.key==='Enter') submitLoad(${v.id}, ${st.id})"><button onclick="submitLoad(${v.id},${st.id}, 1)" class="${btnColor} text-white px-3 py-1.5 rounded-r text-sm shadow-lg transform active:scale-95 transition"><i class="fa-solid fa-plus"></i></button></div>` : '<span class="text-green-500 text-xs font-bold"><i class="fa-solid fa-check mr-1"></i>DONE</span>'}</td><td class="p-3 text-center ${textClass}">${st.plan}</td><td class="p-3 text-center font-bold text-green-400 bg-green-900/20 border-x border-slate-700 text-lg">${l}</td><td class="p-3 text-center ${rem === 0 ? 'text-green-500 font-bold' : 'text-orange-400 font-bold'}">${rem}</td></tr>`;
             });
+            if (tb) tb.innerHTML = _tbHtml;
             const gg = document.getElementById('detailGangGrid'); if (gg) {
-                gg.innerHTML = '';
                 const gangMetrics = {};
                 activeGangs.forEach(g => {
                     gangMetrics[g] = calculateGangStats(v, g);
@@ -1633,6 +1631,7 @@
                     rateDisplay.innerHTML = `<div class="text-[10px] text-slate-400 uppercase font-bold text-center">SHIP PRODUCT</div><div class="text-lg font-bold text-yellow-400 leading-none text-center">${currentShipRate} <span class="text-[10px] text-slate-500">U/Hr</span></div>`;
                 }
 
+                let _ggHtml = '';
                 activeGangs.forEach(g => {
                     const gColor = getGangColor(g);
                     const isSelected = g === curG;
@@ -1642,8 +1641,9 @@
                     const statusDot = isBreak ? `<span class="absolute top-1 right-1 w-3 h-3 rounded-full bg-red-500 shadow-sm border border-white/20"></span>` : `<span class="absolute top-1 right-1 w-3 h-3 rounded-full bg-green-500 shadow-sm border border-white/20 pulse-active"></span>`;
                     const style = isSelected ? `background-color: ${gColor}; border-color: ${gColor}; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.5);` : `border-color: ${gColor}; color: ${gColor}; background-color: rgba(0,0,0,0.2);`;
 
-                    gg.innerHTML += `<div onclick="window.showGangDetail('${window.escapeStr(g)}')" class="relative p-2 rounded text-center border-2 cursor-pointer transition transform hover:scale-105 active:scale-95 shadow-md flex flex-col justify-between min-h-[90px] ${isBreak ? 'opacity-70 grayscale-[0.5]' : ''}" style="${style}">${statusDot}<div class="text-[10px] uppercase truncate font-bold opacity-90 pr-2 border-b border-white/10 pb-1 mb-1">${g}</div><div class="flex-grow flex flex-col justify-center"><div class="text-2xl font-bold leading-none">${metrics.totalQty}</div><div class="text-[10px] font-mono mt-1 opacity-90 bg-black/20 rounded px-1"><i class="fa-solid fa-gauge-high mr-1"></i>${metrics.rate}/hr</div></div></div>`;
+                    _ggHtml += `<div onclick="window.showGangDetail('${window.escapeStr(g)}')" class="relative p-2 rounded text-center border-2 cursor-pointer transition transform hover:scale-105 active:scale-95 shadow-md flex flex-col justify-between min-h-[90px] ${isBreak ? 'opacity-70 grayscale-[0.5]' : ''}" style="${style}">${statusDot}<div class="text-[10px] uppercase truncate font-bold opacity-90 pr-2 border-b border-white/10 pb-1 mb-1">${g}</div><div class="flex-grow flex flex-col justify-center"><div class="text-2xl font-bold leading-none">${metrics.totalQty}</div><div class="text-[10px] font-mono mt-1 opacity-90 bg-black/20 rounded px-1"><i class="fa-solid fa-gauge-high mr-1"></i>${metrics.rate}/hr</div></div></div>`;
                 });
+                gg.innerHTML = _ggHtml;
             }
             const portDiv = document.getElementById('detailPortSummary');
             if (portDiv) {
@@ -1654,12 +1654,13 @@
                 portDiv.innerHTML = pHtml;
             }
             const hl = document.getElementById('detailHistoryBody'); if (hl) {
-                hl.innerHTML = ''; (v.logs || []).filter(l => (l.type || 'load') === window.currentOpMode).slice(0, 20).forEach(log => {
+                let _hlHtml = ''; (v.logs || []).filter(l => (l.type || 'load') === window.currentOpMode).slice(0, 20).forEach(log => {
                     const t = new Date(log.timestamp).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }); const gColor = getGangColor(log.gang);
                     let p = log.port; if (!p) { const stk = (v.stocks || []).find(s => s.id === log.stockId); p = stk ? stk.port : '-'; }
                     const pColor = getPortColor(p); const qtyColor = log.qty < 0 ? 'text-red-400' : 'text-green-400';
-                    hl.innerHTML += `<tr class="hover:bg-slate-800/50 transition"><td class="p-3 text-xs text-gray-400 font-mono">${t}</td><td class="p-3 text-xs font-bold" style="color: ${gColor}">${log.gang}</td><td class="p-3 text-xs text-white">${log.model}</td><td class="p-3 text-xs font-bold" style="color:${pColor}">${p || '-'}</td><td class="p-3 text-xs text-gray-400 font-mono">${log.lane}</td><td class="p-3 text-right ${qtyColor} font-bold">${log.qty > 0 ? '+' : ''}${log.qty}</td></tr>`;
+                    _hlHtml += `<tr class="hover:bg-slate-800/50 transition"><td class="p-3 text-xs text-gray-400 font-mono">${t}</td><td class="p-3 text-xs font-bold" style="color: ${gColor}">${log.gang}</td><td class="p-3 text-xs text-white">${log.model}</td><td class="p-3 text-xs font-bold" style="color:${pColor}">${p || '-'}</td><td class="p-3 text-xs text-gray-400 font-mono">${log.lane}</td><td class="p-3 text-right ${qtyColor} font-bold">${log.qty > 0 ? '+' : ''}${log.qty}</td></tr>`;
                 });
+                hl.innerHTML = _hlHtml;
             }
         };
 
@@ -1679,6 +1680,7 @@
                                     return;
                                 }
                                 window.appData = data; validateData();
+                                _dataDirty = true;
                                 autoCleanupOldData();
                             } else { window.saveData(); }
                             if (document.activeElement.tagName !== 'INPUT') window.render(); else window.updateLiveTime();
@@ -1745,6 +1747,7 @@
                     window.showAlert("Save Failed: " + e.message);
                 } finally {
                     _isSaving = false;
+                    _dataDirty = true;
                     // Re-render since onValue was skipped during save
                     window.render();
                 }
@@ -1954,6 +1957,7 @@
                 if (result.committed && result.snapshot.val()) {
                     window.appData = result.snapshot.val();
                     validateData();
+                    _dataDirty = true;
                     window.render();
                 }
             } catch (e) {
@@ -2022,18 +2026,18 @@
         window.closePeriodReport = function () { document.getElementById('periodReportModal').classList.add('hidden'); }
 
         window.renderAdmin = function () {
-            const l = document.getElementById('adminVesselList'); l.innerHTML = ''; window.appData.vessels.forEach(v => l.innerHTML += `<li class="flex justify-between bg-gray-100 p-2 rounded text-sm"><span class="font-bold text-blue-800">${v.name}</span><button onclick="deleteVessel(${v.id})" class="text-red-500"><i class="fa-solid fa-trash-can"></i></button></li>`);
-            const s = document.getElementById('adminVesselSelect'); s.innerHTML = '<option value="">-- No Vessel --</option>'; window.appData.vessels.forEach(v => s.innerHTML += `<option value="${v.id}">${v.name}</option>`);
+            const l = document.getElementById('adminVesselList'); let _alHtml = ''; window.appData.vessels.forEach(v => _alHtml += `<li class="flex justify-between bg-gray-100 p-2 rounded text-sm"><span class="font-bold text-blue-800">${v.name}</span><button onclick="deleteVessel(${v.id})" class="text-red-500"><i class="fa-solid fa-trash-can"></i></button></li>`); l.innerHTML = _alHtml;
+            const s = document.getElementById('adminVesselSelect'); let _asHtml = '<option value="">-- No Vessel --</option>'; window.appData.vessels.forEach(v => _asHtml += `<option value="${v.id}">${v.name}</option>`); s.innerHTML = _asHtml;
             if (window.activeVesselId) s.value = window.activeVesselId;
 
             // Render Gang List (Dependent on vessel selection)
             window.renderAdminGangList();
 
-            const bl = document.getElementById('adminBreakList'); bl.innerHTML = ''; window.appData.breaks.forEach((b, i) => bl.innerHTML += `<li class="flex justify-between bg-orange-50 p-2 rounded text-sm"><span>${b.name}: ${b.start}-${b.end}</span><button onclick="deleteBreak(${i})" class="text-red-400"><i class="fa-solid fa-trash-can"></i></button></li>`);
-            const pcl = document.getElementById('adminPortColorList'); pcl.innerHTML = '';
+            const bl = document.getElementById('adminBreakList'); let _blHtml = ''; window.appData.breaks.forEach((b, i) => _blHtml += `<li class="flex justify-between bg-orange-50 p-2 rounded text-sm"><span>${b.name}: ${b.start}-${b.end}</span><button onclick="deleteBreak(${i})" class="text-red-400"><i class="fa-solid fa-trash-can"></i></button></li>`); bl.innerHTML = _blHtml;
+            const pcl = document.getElementById('adminPortColorList'); let _pclHtml = '';
             if (window.appData.portColors) {
                 Object.entries(window.appData.portColors).forEach(([p, c]) => {
-                    pcl.innerHTML += `<li class="flex justify-between p-2 bg-gray-50 text-sm border-b last:border-0">
+                    _pclHtml += `<li class="flex justify-between p-2 bg-gray-50 text-sm border-b last:border-0">
                         <div class="flex gap-2 items-center"><span class="w-4 h-4 rounded-full border border-gray-300" style="background:${c}"></span><span class="font-bold">${p}</span></div>
                         <div class="flex gap-3">
                             <button onclick="editPortColor('${window.escapeStr(p)}', '${c}')" class="text-blue-500 hover:text-blue-700 transition"><i class="fa-solid fa-pen"></i></button>
@@ -2042,6 +2046,7 @@
                     </li>`;
                 });
             }
+            pcl.innerHTML = _pclHtml;
             window.renderAdminStockTable();
         }
 
@@ -2077,6 +2082,7 @@
                 // Ensure vessel has disabledGangs array
                 if (!currentVessel.disabledGangs) currentVessel.disabledGangs = [];
 
+                let _glHtml = '';
                 window.appData.gangs.forEach(g => {
                     const isDisabled = currentVessel.disabledGangs.includes(g);
                     const opacity = isDisabled ? 'opacity-50' : '';
@@ -2084,7 +2090,7 @@
                     const iconColor = isDisabled ? 'text-gray-400' : 'text-green-500';
                     const labelColor = isDisabled ? 'text-gray-400 line-through' : 'text-slate-800';
 
-                    gl.innerHTML += `
+                    _glHtml += `
                     <li class="flex justify-between items-center bg-gray-50 p-2 rounded text-sm border border-slate-100 ${opacity}">
                         <span onclick="renameGang('${window.escapeStr(g)}')" class="cursor-pointer font-bold ${labelColor}">${g}</span>
                         <div class="flex gap-2 items-center">
@@ -2097,6 +2103,7 @@
                         </div>
                     </li>`;
                 });
+                gl.innerHTML = _glHtml;
             } else {
                 // No Vessel Selected
                 vesselNameEl.classList.add('hidden');
@@ -2106,18 +2113,20 @@
         }
 
         window.renderAdminStockTable = function () {
-            const b = document.getElementById('adminStockBody'); b.innerHTML = ''; const vId = parseInt(document.getElementById('adminVesselSelect').value);
-            if (!vId) return; window.activeVesselId = vId; const v = window.appData.vessels.find(x => x.id === vId);
+            const b = document.getElementById('adminStockBody'); const vId = parseInt(document.getElementById('adminVesselSelect').value);
+            if (!vId) { b.innerHTML = ''; return; } window.activeVesselId = vId; const v = window.appData.vessels.find(x => x.id === vId);
             const radios = document.getElementsByName('stockType'); let type = 'load';
             for (let i = 0; i < radios.length; i++) { if (radios[i].checked) type = radios[i].value; }
 
+            let _bHtml = '';
             if (v) {
                 (v.stocks || []).filter(s => s.type === type).forEach(s => {
                     const typeBadge = s.type === 'discharge' ? '<span class="text-pink-600 font-bold">D</span>' : '<span class="text-blue-600 font-bold">L</span>';
                     const pColor = getPortColor(s.port);
-                    b.innerHTML += `<tr><td class="p-3">${typeBadge}</td><td class="p-3 font-bold">${s.model}</td><td class="p-3 font-bold" style="color:${pColor}">${s.port || '-'}</td><td class="p-3 font-bold text-gray-500">${s.port2 || '-'}</td><td class="p-3 text-right">${s.plan}</td><td class="p-3 text-center flex gap-2 justify-center"><button onclick="openEditStock(${v.id},${s.id})" class="text-blue-500 hover:text-blue-700 bg-blue-100 p-1 rounded"><i class="fa-solid fa-pen"></i></button><button onclick="deleteStock(${v.id},${s.id})" class="text-red-500 hover:text-red-700 bg-red-100 p-1 rounded"><i class="fa-solid fa-trash"></i></button></td></tr>`;
+                    _bHtml += `<tr><td class="p-3">${typeBadge}</td><td class="p-3 font-bold">${s.model}</td><td class="p-3 font-bold" style="color:${pColor}">${s.port || '-'}</td><td class="p-3 font-bold text-gray-500">${s.port2 || '-'}</td><td class="p-3 text-right">${s.plan}</td><td class="p-3 text-center flex gap-2 justify-center"><button onclick="openEditStock(${v.id},${s.id})" class="text-blue-500 hover:text-blue-700 bg-blue-100 p-1 rounded"><i class="fa-solid fa-pen"></i></button><button onclick="deleteStock(${v.id},${s.id})" class="text-red-500 hover:text-red-700 bg-red-100 p-1 rounded"><i class="fa-solid fa-trash"></i></button></td></tr>`;
                 });
             }
+            b.innerHTML = _bHtml;
         }
 
         function parseTimeWithDayWrap(timeStr, refZeroDate, prevTimestamp) {
@@ -2287,7 +2296,7 @@
             });
 
             const g = document.getElementById('vesselGrid');
-            g.innerHTML = '';
+            let _gridHtml = '';
 
             if (allVessels.length === 0) {
                 g.innerHTML = '<div class="text-center text-gray-500 col-span-full py-10"><i class="fa-solid fa-ship text-4xl mb-3 opacity-30 block"></i>ยังไม่มีเรือในระบบ</div>';
@@ -2299,33 +2308,40 @@
                 return;
             }
 
+            // Pre-compute all stats once to avoid redundant recalculations
+            const _statsCache = new Map();
+            filteredVessels.forEach(v => {
+                _statsCache.set(v.id, {
+                    load: calculateVesselStats(v, 'load'),
+                    discharge: calculateVesselStats(v, 'discharge'),
+                    total: calculateVesselStats(v)
+                });
+            });
+
             const sortedVessels = [...filteredVessels].sort((a, b) => {
-                const sA = calculateVesselStats(a);
-                const sB = calculateVesselStats(b);
+                const sA = _statsCache.get(a.id).total;
+                const sB = _statsCache.get(b.id).total;
                 const completeA = sA.plan > 0 && sA.remaining <= 0;
                 const completeB = sB.plan > 0 && sB.remaining <= 0;
-                // Working vessels first, complete vessels at the bottom
                 if (completeA !== completeB) return completeA ? 1 : -1;
-                // Within same group, newest first
                 return b.id - a.id;
             });
             sortedVessels.forEach(v => {
-                const sLoad = calculateVesselStats(v, 'load');
-                const sDischarge = calculateVesselStats(v, 'discharge');
+                const cached = _statsCache.get(v.id);
+                const sLoad = cached.load;
+                const sDischarge = cached.discharge;
 
                 const hasLoad = sLoad.plan > 0;
                 const hasDischarge = sDischarge.plan > 0;
 
                 let workingCount = 0; let breakCount = 0;
 
-                // --- UPDATED: use v.disabledGangs ---
                 const vesselDisabledGangs = v.disabledGangs || [];
                 const activeGangs = window.appData.gangs.filter(gang => !vesselDisabledGangs.includes(gang));
-                // ------------------------------------
 
                 activeGangs.forEach(g => { const gd = window.getGangData(v, g); if (gd.status === 'working') workingCount++; else breakCount++; });
 
-                const sTotal = calculateVesselStats(v);
+                const sTotal = cached.total;
                 let statusBadge = "";
                 if (sTotal.remaining > 0) {
                     if (workingCount > 0) statusBadge = `<div class="mt-2 flex gap-2 text-[10px] uppercase font-bold"><span class="bg-green-900/40 text-green-400 border border-green-700/50 px-2 py-0.5 rounded flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span> Working: ${workingCount}</span>${breakCount > 0 ? `<span class="bg-red-900/40 text-red-400 border border-red-700/50 px-2 py-0.5 rounded flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span> Break: ${breakCount}</span>` : ''}</div>`;
@@ -2453,7 +2469,7 @@
                     </div>
                 </div>`;
 
-                g.innerHTML += `
+                _gridHtml += `
                 <div onclick="goToDetail(${v.id})" class="${cardClass}">
                     ${completeHtml}
                     <div class="p-4 bg-slate-900 border-b border-slate-700 flex justify-between items-start relative z-10">
@@ -2472,18 +2488,23 @@
                             <div class="text-xs font-mono text-blue-300 mt-1"><i class="fa-solid fa-clock mr-1"></i>${sTotal.etc}</div>
                         </div>
                     </div>
-                    
+
                     <div class="px-5 pt-4 pb-2">
                         ${barsHtml}
                     </div>
 
-                    ${perfHtml} 
+                    ${perfHtml}
                     ${statsBlockHtml}
                 </div>`;
             });
+            g.innerHTML = _gridHtml;
         }
 
-        setInterval(() => { if (window.currentView === 'overview') renderOverview(); if (window.currentView === 'detail') window.updateLiveTime(); }, 1000);
+        // Overview: only re-render when data changed. Detail: update live time every second.
+        setInterval(() => {
+            if (window.currentView === 'overview' && _dataDirty) { _dataDirty = false; renderOverview(); }
+            if (window.currentView === 'detail') window.updateLiveTime();
+        }, 1000);
     </script>
 </body>
 

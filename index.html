@@ -146,7 +146,7 @@
     <nav class="bg-slate-900 border-b border-slate-700 p-4 sticky top-0 z-50 shadow-md">
         <div class="container mx-auto flex justify-between items-center">
             <div class="flex items-center gap-3 cursor-pointer" onclick="goToOverview()">
-                <img src="logo_20th.png" alt="2PS 20th Anniversary" class="h-12 w-auto object-contain">
+                <img src="logo.jpg" alt="2PS 20th Anniversary" class="h-12 w-auto object-contain">
                 <div>
                     <h1 class="text-xl font-bold tracking-wide">ครบรอบ 20 ปี 2PS SERVICE</h1>
                     <div class="text-xs text-slate-400 flex items-center gap-2">
@@ -179,7 +179,7 @@
             <div id="loader-spinner" class="flex flex-col items-center">
                 <!-- 20th Anniversary Logo -->
                 <div class="relative mb-8 ship-anim">
-                    <img src="logo_20th.png" alt="2PS 20th Anniversary"
+                    <img src="logo.jpg" alt="2PS 20th Anniversary"
                         class="h-48 w-auto object-contain drop-shadow-2xl">
                 </div>
 
@@ -2387,34 +2387,74 @@
                 }
 
                 let barsHtml = '';
-                const renderBar = (stats, type) => {
+                // Ship-hull shaped progress indicator with 3D extrusion. Discharge = red, Load = green.
+                // Hull deck top y=22, hull bottom y=92  ->  fill range 70 units. Extrusion offset (7,8).
+                const HULL_PATH = "M6,34 L6,28 L20,28 L20,22 L60,22 L60,36 L86,36 L86,22 L240,22 L240,34 L274,34 L274,70 L256,92 L6,92 Z";
+                const renderBar = (stats, type, compact) => {
                     const pct = stats.plan > 0 ? Math.round((stats.loaded / stats.plan) * 100) : 0;
-                    const visualPct = Math.max(0, Math.min(100, pct));
                     const isLoad = type === 'load';
-                    const gradient = isLoad ? "from-blue-600 to-blue-400" : "from-pink-600 to-pink-400";
-                    const badgeColor = isLoad ? "bg-blue-600 border-blue-400" : "bg-pink-600 border-pink-400";
-                    const label = isLoad ? "LOADING (Export)" : "DISCHARGE (Import)";
-                    const labelColor = isLoad ? "text-blue-400" : "text-pink-400";
-                    const icon = isLoad ? "fa-upload" : "fa-download";
+                    // Load fills up as cargo is loaded; Discharge starts FULL (0%) and empties to 0 fill at 100%.
+                    const fillPct = Math.max(0, Math.min(100, isLoad ? pct : 100 - pct));
+
+                    const fillTopY = 92 - (fillPct / 100) * 70;
+                    const shadeY = Math.max(86, fillTopY);   // inner bottom shading never rises above the waterline
+                    const uid = `${v.id}_${type}`;
+                    const svgH = compact ? 76 : 96;          // shorter hull when shown side-by-side
+                    const pctCls = compact ? 'text-2xl' : 'text-4xl';
+
+                    // front face gradient (glossy: light top -> dark bottom)
+                    const gradTop = isLoad ? '#86efac' : '#fca5a5';
+                    const gradMid = isLoad ? '#4ade80' : '#f87171';
+                    const gradBot = isLoad ? '#15803d' : '#b91c1c';
+                    const gradDeep = isLoad ? '#0f3d22' : '#5e1414';   // darkest, for inner bottom shading
+                    const stroke   = isLoad ? '#22c55e' : '#ef4444';
+
+                    const shortLabel = isLoad ? 'LOAD' : 'DISCHARGE';
+                    const iconBg   = isLoad ? 'bg-green-500' : 'bg-red-500';
+                    const textCol  = isLoad ? 'text-green-400' : 'text-red-400';
+                    const arrow    = isLoad ? 'fa-arrow-up' : 'fa-arrow-down';
 
                     return `
-                    <div class="mb-3 last:mb-0">
-                        <div class="flex justify-between items-end mb-1">
-                            <div class="text-[10px] font-bold ${labelColor} uppercase"><i class="fa-solid ${icon} mr-1"></i>${label}</div>
-                            <div class="text-[10px] text-slate-400 font-mono">${stats.loaded} / ${stats.plan}</div>
+                    <div>
+                        <div class="relative">
+                            <svg viewBox="0 0 292 106" preserveAspectRatio="none" class="w-full" style="height:${svgH}px; display:block;">
+                                <defs>
+                                    <linearGradient id="g_${uid}" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0" stop-color="${gradTop}"/>
+                                        <stop offset="0.18" stop-color="${gradMid}"/>
+                                        <stop offset="1" stop-color="${gradBot}"/>
+                                    </linearGradient>
+                                    <clipPath id="c_${uid}"><path d="${HULL_PATH}"/></clipPath>
+                                </defs>
+                                <!-- hull (everything below is clipped to the hull, so nothing leaks outside) -->
+                                <path d="${HULL_PATH}" fill="#d3dae3"/>
+                                <g clip-path="url(#c_${uid})">
+                                    <rect x="0" y="${fillTopY}" width="280" height="120" fill="url(#g_${uid})"/>
+                                    <rect x="0" y="${fillTopY}" width="280" height="2.5" fill="#ffffff" opacity="0.5"/>
+                                    <!-- inner bottom shading for a subtle 3D feel (stays inside the hull) -->
+                                    <rect x="0" y="${shadeY}" width="280" height="40" fill="${gradDeep}" opacity="0.55"/>
+                                </g>
+                                <path d="${HULL_PATH}" fill="none" stroke="${stroke}" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+                            </svg>
+                            <div class="absolute inset-0 flex items-center justify-center pointer-events-none" style="padding-right:6px;">
+                                <span class="${pctCls} font-extrabold italic text-white" style="text-shadow: 0 3px 8px rgba(0,0,0,0.45);">${pct}%</span>
+                            </div>
                         </div>
-                        <div class="relative w-full h-2 bg-slate-700 rounded-full">
-                            <div class="absolute top-0 left-0 h-full bg-gradient-to-r ${gradient} rounded-full transition-all duration-1000" style="width: ${visualPct}%"></div>
-                            <div class="absolute top-1/2 -translate-y-1/2 transition-all duration-1000 z-10 flex flex-col items-center" style="left: ${visualPct}%; transform: translate(-50%, -50%);">
-                                <div class="${badgeColor} text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-lg mb-1 whitespace-nowrap border">${pct}%</div>
-                                <i class="fa-solid fa-ferry text-xl text-white drop-shadow-md" style="text-shadow: 0 2px 4px rgba(0,0,0,0.5);"></i>
+                        <div class="flex justify-center -mt-2 relative z-10">
+                            <div class="flex items-center gap-1.5 bg-slate-900/90 border border-slate-700 px-2 py-0.5 rounded-full shadow-lg">
+                                <span class="w-4 h-4 rounded-full flex items-center justify-center ${iconBg} text-white text-[8px]"><i class="fa-solid ${arrow}"></i></span>
+                                <span class="text-[10px] font-bold ${textCol} uppercase tracking-wide">${shortLabel}</span>
+                                <span class="text-[9px] text-slate-400 font-mono">${stats.loaded}/${stats.plan}</span>
                             </div>
                         </div>
                     </div>`;
                 };
 
-                if (hasDischarge) barsHtml += renderBar(sDischarge, 'discharge');
-                if (hasLoad || (!hasDischarge)) barsHtml += renderBar(sLoad, 'load');
+                // Discharge (red) on top, Load (green) below — stacked vertically, each full width.
+                let shipsHtml = '';
+                if (hasDischarge) shipsHtml += renderBar(sDischarge, 'discharge', false);
+                if (hasLoad || (!hasDischarge)) shipsHtml += renderBar(sLoad, 'load', false);
+                barsHtml = `<div class="grid grid-cols-1 gap-4">${shipsHtml}</div>`;
 
                 let statsBlockHtml = '<div class="p-4 border-t border-slate-700/50 flex flex-col gap-3">';
 

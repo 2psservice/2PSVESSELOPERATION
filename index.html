@@ -2349,7 +2349,7 @@
                 }
 
                 let isComplete = (sTotal.plan > 0 && sTotal.remaining <= 0);
-                let completeHtml = '';
+                let completeCardHtml = '';
                 let cardClass = "bg-slate-800 rounded-xl overflow-hidden shadow-lg border border-slate-700 cursor-pointer hover:border-blue-500 transition group relative";
 
                 if (isComplete) {
@@ -2357,31 +2357,40 @@
                     if (v.logs && v.logs.length > 0) {
                         const sortedLogs = [...v.logs].sort((a, b) => a.timestamp - b.timestamp);
                         const lastLog = sortedLogs[sortedLogs.length - 1];
-                        const endMs = lastLog.timestamp;
-                        const d = new Date(endMs);
+                        const d = new Date(lastLog.timestamp);
                         completeTimeStr = d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
                     }
 
-                    cardClass = "bg-slate-800 rounded-xl overflow-hidden shadow-lg border-2 border-green-500 cursor-pointer transition group relative";
-
-                    completeHtml = `
-                    <div class="absolute inset-0 top-[5.5rem] bg-slate-900/95 z-20 flex flex-col items-center justify-center text-center backdrop-blur-sm p-4">
-                        <h3 class="text-3xl font-extrabold text-green-500 mb-2 uppercase tracking-widest drop-shadow-[0_2px_10px_rgba(34,197,94,0.5)]">COMPLETE</h3>
-                        
-                        <div class="text-white text-xs bg-slate-800 px-4 py-1.5 rounded-full border border-green-600/50 shadow-lg mb-4 flex items-center gap-2">
-                            <i class="fa-solid fa-flag-checkered text-yellow-400"></i> Finish: ${completeTimeStr}
+                    // Compact card for completed vessels: full info in one short row, doesn't stretch (self-start) to save space.
+                    completeCardHtml = `
+                    <div onclick="goToDetail(${v.id})" class="self-start bg-slate-800 rounded-xl border-2 border-green-500/70 shadow-lg cursor-pointer hover:border-green-400 transition p-3">
+                        <div class="flex items-center justify-between gap-2">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <div class="bg-green-600 p-1.5 rounded text-white shrink-0"><i class="fa-solid fa-ship"></i></div>
+                                <div class="min-w-0">
+                                    <h3 class="font-bold text-white text-sm truncate leading-tight">${v.name}</h3>
+                                    <div class="text-[10px] text-slate-400 font-mono">${v.voy}</div>
+                                </div>
+                            </div>
+                            <span class="shrink-0 text-[10px] font-extrabold text-green-400 bg-green-900/40 border border-green-600/50 px-2 py-1 rounded uppercase tracking-wider flex items-center gap-1"><i class="fa-solid fa-circle-check"></i> Complete</span>
                         </div>
-
-                        <!-- Stats for Complete -->
-                        <div class="grid grid-cols-2 gap-3 w-full max-w-[240px]">
-                             <div class="bg-slate-800 p-2 rounded-lg border border-slate-600 shadow-sm">
-                                <div class="text-[10px] text-slate-400 uppercase font-bold mb-1"><i class="fa-regular fa-clock mr-1"></i>Duration</div>
-                                <div class="text-sm font-bold text-white">${sTotal.durationStr}</div>
-                             </div>
-                             <div class="bg-slate-800 p-2 rounded-lg border border-slate-600 shadow-sm">
-                                <div class="text-[10px] text-slate-400 uppercase font-bold mb-1"><i class="fa-solid fa-gauge-high mr-1"></i>Prod</div>
-                                <div class="text-sm font-bold text-yellow-400">${sTotal.shipProduct} <span class="text-[10px] text-slate-500">/hr</span></div>
-                             </div>
+                        <div class="mt-2.5 grid grid-cols-4 gap-1.5 text-center">
+                            <div class="bg-slate-900/50 rounded p-1.5 border border-slate-700/50">
+                                <div class="text-[8px] text-slate-400 uppercase font-bold">Total</div>
+                                <div class="text-xs font-bold text-white">${sTotal.loaded}</div>
+                            </div>
+                            <div class="bg-slate-900/50 rounded p-1.5 border border-slate-700/50">
+                                <div class="text-[8px] text-slate-400 uppercase font-bold">Finish</div>
+                                <div class="text-[10px] font-bold text-white leading-tight">${completeTimeStr}</div>
+                            </div>
+                            <div class="bg-slate-900/50 rounded p-1.5 border border-slate-700/50">
+                                <div class="text-[8px] text-slate-400 uppercase font-bold">Time</div>
+                                <div class="text-xs font-bold text-white">${sTotal.durationStr}</div>
+                            </div>
+                            <div class="bg-slate-900/50 rounded p-1.5 border border-slate-700/50">
+                                <div class="text-[8px] text-slate-400 uppercase font-bold">Prod</div>
+                                <div class="text-xs font-bold text-yellow-400">${sTotal.shipProduct}<span class="text-[8px] text-slate-500">/hr</span></div>
+                            </div>
                         </div>
                     </div>`;
                 }
@@ -2509,9 +2518,10 @@
                     </div>
                 </div>`;
 
+                if (isComplete) { _gridHtml += completeCardHtml; return; }
+
                 _gridHtml += `
                 <div onclick="goToDetail(${v.id})" class="${cardClass}">
-                    ${completeHtml}
                     <div class="p-4 bg-slate-900 border-b border-slate-700 flex justify-between items-start relative z-10">
                         <div>
                             <div class="flex items-center gap-2 mb-1">

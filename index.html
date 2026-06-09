@@ -18,6 +18,22 @@
             color: #f8fafc;
         }
 
+        /* Fixed photographic working background (port / vehicles) with a dark overlay for readability */
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            background: linear-gradient(rgba(15, 23, 42, 0.85), rgba(15, 23, 42, 0.92)),
+                        url("bg-vehicles.jpg") center center / cover no-repeat;
+        }
+
+        /* Loading screen hero background (photo more visible, like the marketing hero) */
+        .loader-bg {
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.72), rgba(23, 37, 84, 0.82)),
+                        url("bg-vehicles.jpg") center center / cover no-repeat;
+        }
+
         .glass-panel {
             background: rgba(30, 41, 59, 0.7);
             backdrop-filter: blur(10px);
@@ -175,7 +191,7 @@
 
         <!-- LOADER & ERROR SCREEN -->
         <div id="app-loader"
-            class="fixed inset-0 bg-slate-900 z-40 flex flex-col items-center justify-center text-white text-center p-6">
+            class="fixed inset-0 loader-bg z-40 flex flex-col items-center justify-center text-white text-center p-6">
             <div id="loader-spinner" class="flex flex-col items-center">
                 <!-- 20th Anniversary Logo -->
                 <div class="relative mb-8 ship-anim">

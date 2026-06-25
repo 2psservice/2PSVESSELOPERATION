@@ -153,6 +153,32 @@
             background-color: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(5px);
         }
+
+        /* Admin Sidebar Buttons */
+        .admin-sidebar-btn {
+            color: #94a3b8;
+            transition: background 0.15s, color 0.15s;
+        }
+        .admin-sidebar-btn:hover {
+            background: rgba(71, 85, 105, 0.4);
+            color: #f1f5f9;
+        }
+        .admin-sidebar-btn.as-active {
+            background: rgba(71, 85, 105, 0.7);
+            color: #f1f5f9;
+        }
+
+        /* Admin mode: solid gray background, no photo, full-width main */
+        body.admin-mode::before {
+            background: #0f172a;
+        }
+        body.admin-mode main {
+            max-width: 100%;
+            padding: 0;
+        }
+        #view-admin {
+            padding: 16px;
+        }
     </style>
 </head>
 
@@ -416,115 +442,186 @@
             </div>
         </div>
 
-        <!-- VIEW 3: ADMIN SETUP -->
+        <!-- VIEW 3: ADMIN SETUP — TOS Sidebar Layout -->
         <div id="view-admin" class="hidden fade-in">
-            <div class="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
-                <h2 class="text-2xl font-bold text-white border-l-4 border-purple-500 pl-4">System Setup</h2>
-                <button onclick="logoutAdmin()"
-                    class="text-red-400 text-xs hover:text-red-500 border border-red-500/50 px-3 py-1 rounded">
-                    <i class="fa-solid fa-right-from-bracket mr-2"></i>Logout Admin
-                </button>
-            </div>
+            <div class="flex gap-4" style="min-height:78vh;">
 
-            <div class="grid md:grid-cols-3 gap-6">
-                <!-- Settings -->
-                <div class="space-y-6">
-                    <div class="bg-white p-6 rounded-xl text-black shadow-lg shadow-slate-900/50 h-fit">
-                        <h3 class="text-lg font-bold mb-4 text-blue-800 border-b pb-2"><i
-                                class="fa-solid fa-ship mr-2"></i>1. Manage Vessels</h3>
-                        <div class="bg-blue-50 p-3 rounded-lg mb-4 border border-blue-100">
-                            <div class="space-y-2">
-                                <input type="text" id="newVesName" class="input-light" placeholder="Vessel Name">
-                                <div class="grid grid-cols-2 gap-2">
-                                    <input type="text" id="newVesVoy" class="input-light" placeholder="Voyage No.">
-                                    <input type="time" id="newVesTime" class="input-light" value="08:00">
-                                </div>
-                                <button onclick="addNewVessel()"
-                                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded shadow"><i
-                                        class="fa-solid fa-plus"></i> Create Vessel</button>
+                <!-- ══ LEFT SIDEBAR ══ -->
+                <aside class="w-14 md:w-56 bg-slate-900/90 border border-slate-700 rounded-2xl flex flex-col shrink-0 overflow-hidden shadow-xl">
+                    <!-- Brand -->
+                    <div class="hidden md:flex items-center gap-2 px-4 py-3.5 border-b border-slate-700 bg-slate-800/60">
+                        <i class="fa-solid fa-sliders text-purple-400 text-sm"></i>
+                        <span class="text-[11px] font-extrabold text-slate-300 uppercase tracking-widest">System Setup</span>
+                    </div>
+                    <div class="md:hidden flex items-center justify-center py-3 border-b border-slate-700">
+                        <i class="fa-solid fa-sliders text-purple-400"></i>
+                    </div>
+
+                    <!-- Nav Items -->
+                    <nav class="flex-1 py-3 px-2 space-y-0.5">
+                        <button onclick="showAdminSection('vessels')" id="asSide-vessels"
+                            class="admin-sidebar-btn as-active w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left">
+                            <span class="w-8 h-8 flex items-center justify-center rounded-lg bg-blue-600/20 text-blue-400 shrink-0 text-sm"><i class="fa-solid fa-ship"></i></span>
+                            <div class="hidden md:block min-w-0">
+                                <div class="text-xs font-bold leading-tight">Vessels</div>
+                                <div class="text-[10px] text-slate-500 leading-tight">Add / remove</div>
+                            </div>
+                        </button>
+
+                        <button onclick="showAdminSection('stock')" id="asSide-stock"
+                            class="admin-sidebar-btn w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left">
+                            <span class="w-8 h-8 flex items-center justify-center rounded-lg bg-green-600/20 text-green-400 shrink-0 text-sm"><i class="fa-solid fa-layer-group"></i></span>
+                            <div class="hidden md:block min-w-0">
+                                <div class="text-xs font-bold leading-tight">Stock</div>
+                                <div class="text-[10px] text-slate-500 leading-tight">Import cargo</div>
+                            </div>
+                        </button>
+
+                        <button onclick="showAdminSection('gangs')" id="asSide-gangs"
+                            class="admin-sidebar-btn w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left">
+                            <span class="w-8 h-8 flex items-center justify-center rounded-lg bg-purple-600/20 text-purple-400 shrink-0 text-sm"><i class="fa-solid fa-users-gear"></i></span>
+                            <div class="hidden md:block min-w-0">
+                                <div class="text-xs font-bold leading-tight">Gangs</div>
+                                <div class="text-[10px] text-slate-500 leading-tight">Work gangs</div>
+                            </div>
+                        </button>
+
+                        <button onclick="showAdminSection('ports')" id="asSide-ports"
+                            class="admin-sidebar-btn w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left">
+                            <span class="w-8 h-8 flex items-center justify-center rounded-lg bg-teal-600/20 text-teal-400 shrink-0 text-sm"><i class="fa-solid fa-palette"></i></span>
+                            <div class="hidden md:block min-w-0">
+                                <div class="text-xs font-bold leading-tight">Port Colors</div>
+                                <div class="text-[10px] text-slate-500 leading-tight">Label destinations</div>
+                            </div>
+                        </button>
+
+                        <button onclick="showAdminSection('security')" id="asSide-security"
+                            class="admin-sidebar-btn w-full flex items-center gap-3 px-2 py-2.5 rounded-lg text-left">
+                            <span class="w-8 h-8 flex items-center justify-center rounded-lg bg-yellow-600/20 text-yellow-400 shrink-0 text-sm"><i class="fa-solid fa-shield-halved"></i></span>
+                            <div class="hidden md:block min-w-0">
+                                <div class="text-xs font-bold leading-tight">Security</div>
+                                <div class="text-[10px] text-slate-500 leading-tight">Admin credentials</div>
+                            </div>
+                        </button>
+                    </nav>
+
+                    <!-- Sidebar Footer -->
+                    <div class="p-2 border-t border-slate-700 space-y-1">
+                        <button onclick="logoutAdmin()"
+                            class="w-full flex items-center justify-center md:justify-start gap-2 px-2 py-2 rounded-lg text-red-400 hover:bg-red-500/10 transition text-xs font-bold">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                            <span class="hidden md:inline">Logout Admin</span>
+                        </button>
+                        <button onclick="hardReset()"
+                            class="w-full flex items-center justify-center md:justify-start gap-2 px-2 py-2 rounded-lg text-slate-600 hover:bg-red-900/20 hover:text-red-500 transition">
+                            <i class="fa-solid fa-triangle-exclamation text-xs"></i>
+                            <span class="hidden md:inline text-[10px]">Factory Reset</span>
+                        </button>
+                    </div>
+                </aside>
+
+                <!-- ══ MAIN CONTENT ══ -->
+                <div class="flex-1 min-w-0 flex flex-col gap-4">
+
+                    <!-- Top Bar -->
+                    <div class="flex items-center justify-between bg-slate-800/60 rounded-2xl px-5 py-3 border border-slate-700 backdrop-blur-sm shadow">
+                        <div class="flex items-center gap-3">
+                            <div id="adminSectionIcon" class="w-10 h-10 rounded-xl flex items-center justify-center text-blue-400 bg-blue-600/20 border border-blue-500/30 text-sm shrink-0">
+                                <i class="fa-solid fa-ship"></i>
+                            </div>
+                            <div>
+                                <h2 id="adminSectionTitle" class="text-lg font-extrabold text-white leading-tight">Manage Vessels</h2>
+                                <p id="adminSectionDesc" class="text-[11px] text-slate-400">Add, edit or remove vessel records</p>
                             </div>
                         </div>
-                        <ul id="adminVesselList" class="space-y-2 max-h-60 overflow-y-auto"></ul>
-                    </div>
-
-                    <div class="bg-white p-6 rounded-xl text-black shadow-lg shadow-slate-900/50 h-fit">
-                        <h3 class="text-lg font-bold mb-4 text-orange-700 border-b pb-2"><i
-                                class="fa-solid fa-mug-hot mr-2"></i>4. Global Break Time Schedule</h3>
-                        <div class="flex gap-2 mb-2">
-                            <input type="text" id="breakName" class="input-light w-1/3" placeholder="Name (P1)">
-                            <input type="time" id="breakStart" class="input-light w-1/3">
-                            <input type="time" id="breakEnd" class="input-light w-1/3">
+                        <div class="hidden sm:flex items-center gap-2 text-[10px] text-slate-500 border border-slate-600 px-3 py-1.5 rounded-full">
+                            <span class="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></span>
+                            Admin Mode
                         </div>
-                        <button onclick="addBreak()"
-                            class="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-1 px-4 rounded shadow mb-3 text-sm">Add
-                            Break Period</button>
-                        <ul id="adminBreakList" class="space-y-1 max-h-40 overflow-y-auto border-t pt-2"></ul>
                     </div>
 
-                    <div class="bg-white p-6 rounded-xl text-black shadow-lg shadow-slate-900/50 h-fit">
-                        <h3 class="text-lg font-bold mb-4 text-teal-700 border-b pb-2"><i
-                                class="fa-solid fa-palette mr-2"></i>5. Manage Port Colors</h3>
-                        <div class="flex gap-2 mb-2">
-                            <input type="text" id="portColorName" class="input-light w-2/3"
-                                placeholder="Port Name (e.g. JAPAN)">
-                            <input type="color" id="portColorPicker" class="h-10 w-1/3 cursor-pointer" value="#22c55e">
+                    <!-- ─── PANEL: VESSELS ─── -->
+                    <div id="asPanel-vessels" class="admin-panel bg-slate-800/50 border border-slate-700 rounded-2xl p-5 flex-1">
+                        <div class="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-6 h-full">
+                            <!-- Form -->
+                            <div class="bg-slate-700/50 p-4 rounded-xl border border-slate-600 h-fit">
+                                <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+                                    <i class="fa-solid fa-plus-circle mr-1 text-blue-400"></i>New Vessel
+                                </div>
+                                <div class="space-y-2">
+                                    <input type="text" id="newVesName" class="input-light" placeholder="Vessel Name">
+                                    <input type="text" id="newVesVoy" class="input-light" placeholder="Voyage No.">
+                                    <button onclick="addNewVessel()"
+                                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg shadow">
+                                        <i class="fa-solid fa-plus mr-2"></i>Create Vessel
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Vessel List -->
+                            <div class="flex flex-col min-h-0">
+                                <div class="flex items-center gap-2 mb-3 flex-wrap">
+                                    <span class="text-xs font-bold text-slate-400 uppercase tracking-wider"><i class="fa-solid fa-list mr-1 text-blue-400"></i>Vessels</span>
+                                    <input type="month" id="vesMonthFilter" onchange="window.renderAdminVesselList()"
+                                        class="bg-slate-700 border border-slate-500 text-white text-xs rounded-lg px-2 py-1 focus:border-blue-400 focus:outline-none cursor-pointer">
+                                    <button onclick="document.getElementById('vesMonthFilter').value=''; window.renderAdminVesselList()"
+                                        class="text-[10px] text-slate-400 hover:text-white border border-slate-600 hover:border-slate-400 px-2 py-1 rounded-lg transition">All</button>
+                                    <span id="vesCountBadge" class="text-[10px] text-slate-500 ml-auto"></span>
+                                </div>
+                                <ul id="adminVesselList" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2 overflow-y-auto pr-1" style="max-height:62vh;"></ul>
+                            </div>
                         </div>
-                        <button onclick="savePortColor()"
-                            class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-1 px-4 rounded shadow mb-3 text-sm">Save
-                            Color</button>
-                        <ul id="adminPortColorList" class="space-y-1 max-h-40 overflow-y-auto border-t pt-2"></ul>
                     </div>
-                </div>
 
-                <!-- Stock & Gangs -->
-                <div class="md:col-span-2 space-y-6">
-                    <div class="bg-white p-6 rounded-xl text-black shadow-lg shadow-slate-900/50">
-                        <h3 class="text-lg font-bold mb-4 text-green-800 border-b pb-2"><i
-                                class="fa-solid fa-layer-group mr-2"></i>2. Manage Stock</h3>
-                        <div class="flex justify-between items-end mb-4 gap-2">
-                            <div class="flex-grow">
-                                <label class="block text-xs font-bold text-gray-500 mb-1">Select Vessel to Edit:</label>
+                    <!-- ─── PANEL: STOCK ─── -->
+                    <div id="asPanel-stock" class="admin-panel hidden bg-slate-800/50 border border-slate-700 rounded-2xl p-5 flex-1">
+                        <div class="flex flex-wrap items-end mb-4 gap-2">
+                            <div class="flex-grow min-w-[200px]">
+                                <label class="block text-xs font-bold text-slate-400 mb-1">Select Vessel to Edit:</label>
                                 <select id="adminVesselSelect" onchange="window.handleAdminVesselChange()"
-                                    class="w-full p-2 border-2 border-green-500 rounded bg-green-50 font-bold text-gray-800">
+                                    class="w-full p-2 border-2 border-green-500/70 rounded-lg bg-green-900/20 font-bold text-white text-sm focus:outline-none focus:border-green-400">
                                     <option value="">-- No Vessel --</option>
                                 </select>
                             </div>
-                            <div class="shrink-0">
-                                <input type="file" id="excelUpload" accept=".xlsx, .xls" class="hidden"
-                                    onchange="handleExcelUpload()">
-                                <button onclick="document.getElementById('excelUpload').click()"
-                                    class="bg-green-700 hover:bg-green-800 text-white font-bold py-2.5 px-4 rounded shadow flex items-center text-sm border border-green-900">
-                                    <i class="fa-solid fa-file-excel mr-2 text-white"></i> Import Excel
-                                </button>
+                            <div class="flex items-end gap-2">
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-400 mb-1">Filter Month</label>
+                                    <div class="flex items-center gap-1">
+                                        <input type="month" id="stockMonthFilter" onchange="window.renderAdminStockSelect()"
+                                            class="bg-slate-700 border border-slate-500 text-white text-xs rounded-lg px-2 py-2 focus:border-green-400 focus:outline-none cursor-pointer">
+                                        <button onclick="document.getElementById('stockMonthFilter').value=''; window.renderAdminStockSelect()"
+                                            class="text-[10px] text-slate-400 hover:text-white border border-slate-600 px-2 py-2 rounded-lg transition">All</button>
+                                    </div>
+                                </div>
+                                <div>
+                                    <input type="file" id="excelUpload" accept=".xlsx, .xls" class="hidden" onchange="handleExcelUpload()">
+                                    <button onclick="document.getElementById('excelUpload').click()"
+                                        class="bg-green-700 hover:bg-green-800 text-white font-bold py-2 px-4 rounded-lg shadow flex items-center text-sm border border-green-900">
+                                        <i class="fa-solid fa-file-excel mr-2"></i>Import Excel
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                        <div class="flex gap-4 mb-2 bg-gray-100 p-2 rounded">
+                        <div class="flex gap-4 mb-3 bg-slate-700/50 p-2.5 rounded-lg border border-slate-600">
                             <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="radio" name="stockType" value="load" checked
-                                    onchange="updateAdminStockForm(); renderAdminStockTable()">
-                                <span class="text-sm font-bold text-blue-700">Loading (Export)</span>
+                                <input type="radio" name="stockType" value="load" checked onchange="updateAdminStockForm(); renderAdminStockTable()">
+                                <span class="text-sm font-bold text-blue-300">Loading (Export)</span>
                             </label>
                             <label class="flex items-center gap-2 cursor-pointer">
-                                <input type="radio" name="stockType" value="discharge"
-                                    onchange="updateAdminStockForm(); renderAdminStockTable()">
-                                <span class="text-sm font-bold text-pink-600">Discharge (Import)</span>
+                                <input type="radio" name="stockType" value="discharge" onchange="updateAdminStockForm(); renderAdminStockTable()">
+                                <span class="text-sm font-bold text-pink-400">Discharge (Import)</span>
                             </label>
                         </div>
-
-                        <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mb-4 bg-gray-100 p-3 rounded border">
+                        <div class="grid grid-cols-2 md:grid-cols-6 gap-2 mb-4 bg-slate-700/50 p-3 rounded-lg border border-slate-600">
                             <input type="text" id="addModel" class="input-light col-span-1" placeholder="Model">
-                            <input type="text" id="addPort" class="input-light col-span-1"
-                                placeholder="Port 1 (Disch/Load)">
-                            <input type="text" id="addPort2" class="input-light col-span-1"
-                                placeholder="Port 2 (Final/Disch)">
+                            <input type="text" id="addPort" class="input-light col-span-1" placeholder="Port 1 (Disch/Load)">
+                            <input type="text" id="addPort2" class="input-light col-span-1" placeholder="Port 2 (Final/Disch)">
                             <input type="text" id="addLane" class="input-light col-span-1" placeholder="Block/Deck">
                             <input type="number" id="addPlan" class="input-light col-span-1" placeholder="Qty">
-                            <button onclick="addStockItem()"
-                                class="bg-green-600 text-white font-bold rounded shadow col-span-1">Add</button>
+                            <button onclick="addStockItem()" class="bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow col-span-1">Add</button>
                         </div>
-                        <div class="overflow-x-auto border rounded-lg h-80 overflow-y-auto">
-                            <table class="w-full text-left text-sm text-gray-800">
-                                <thead class="bg-gray-200 text-xs uppercase sticky top-0">
+                        <div class="overflow-x-auto border border-slate-600 rounded-xl" style="max-height:50vh;overflow-y:auto;">
+                            <table class="w-full text-left text-sm">
+                                <thead class="bg-slate-700 text-slate-300 text-xs uppercase sticky top-0">
                                     <tr>
                                         <th class="p-3">Type</th>
                                         <th class="p-3">Model</th>
@@ -534,64 +631,82 @@
                                         <th class="p-3 text-center">Action</th>
                                     </tr>
                                 </thead>
-                                <tbody id="adminStockBody" class="divide-y divide-gray-200"></tbody>
+                                <tbody id="adminStockBody" class="divide-y divide-slate-700 text-slate-300"></tbody>
                             </table>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="bg-white p-6 rounded-xl text-black shadow-lg shadow-slate-900/50 h-fit">
-                            <h3
-                                class="text-lg font-bold mb-4 text-purple-800 border-b pb-2 flex justify-between items-center">
-                                <span><i class="fa-solid fa-users-gear mr-2"></i>3. Manage Gangs</span>
-                                <span id="adminGangVesselName"
-                                    class="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded hidden"></span>
-                            </h3>
-                            <div class="flex gap-2 mb-4">
-                                <input type="text" id="newGangName" class="input-light"
-                                    placeholder="New Gang Name (Global)">
-                                <button onclick="addNewGang()"
-                                    class="bg-purple-600 text-white font-bold px-4 rounded shadow"><i
-                                        class="fa-solid fa-plus"></i></button>
+                    <!-- ─── PANEL: GANGS ─── -->
+                    <div id="asPanel-gangs" class="admin-panel hidden bg-slate-800/50 border border-slate-700 rounded-2xl p-5 flex-1">
+                        <div class="flex flex-wrap items-center gap-2 mb-4">
+                            <span id="adminGangVesselName" class="hidden text-xs bg-purple-900/40 text-purple-300 border border-purple-700/50 px-3 py-1.5 rounded-full inline-flex items-center gap-2">
+                                <i class="fa-solid fa-ship text-[10px]"></i>
+                            </span>
+                            <div class="flex gap-2 flex-1 min-w-[200px]">
+                                <input type="text" id="newGangName" class="input-light flex-1" placeholder="New Gang Name (Global)">
+                                <button onclick="addNewGang()" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-4 rounded-lg shadow shrink-0">
+                                    <i class="fa-solid fa-plus"></i>
+                                </button>
                             </div>
-                            <div class="text-[10px] text-gray-500 mb-2" id="adminGangHelpText">
-                                <i class="fa-solid fa-circle-info mr-1"></i> Select a vessel above to assign/enable
-                                gangs.
+                            <div class="text-[10px] text-slate-500 w-full" id="adminGangHelpText">
+                                <i class="fa-solid fa-circle-info mr-1"></i> Select a vessel in Stock to assign/enable gangs.
                             </div>
-                            <ul id="adminGangList" class="space-y-1 max-h-48 overflow-y-auto relative min-h-[50px]">
-                            </ul>
                         </div>
+                        <ul id="adminGangList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 overflow-y-auto relative min-h-[50px]" style="max-height:62vh;"></ul>
+                    </div>
 
-                        <!-- Admin Security Section -->
-                        <div class="bg-slate-700 p-6 rounded-xl text-white shadow-lg h-fit border border-slate-600">
-                            <h3 class="text-lg font-bold mb-4 text-yellow-400 border-b border-slate-500 pb-2"><i
-                                    class="fa-solid fa-shield-halved mr-2"></i>Admin Security</h3>
-                            <div class="space-y-3">
-                                <div>
-                                    <label class="block text-xs font-bold text-slate-300 mb-1">Change Username</label>
-                                    <input type="text" id="changeAdminUser"
-                                        class="bg-slate-800 border border-slate-500 text-white text-sm rounded-lg block w-full p-2">
+                    <!-- ─── PANEL: PORT COLORS ─── -->
+                    <div id="asPanel-ports" class="admin-panel hidden bg-slate-800/50 border border-slate-700 rounded-2xl p-5 flex-1">
+                        <div class="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6">
+                            <div class="bg-slate-700/50 p-4 rounded-xl border border-slate-600 h-fit">
+                                <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+                                    <i class="fa-solid fa-plus-circle mr-1 text-teal-400"></i>Add / Edit Color
                                 </div>
-                                <div>
-                                    <label class="block text-xs font-bold text-slate-300 mb-1">Change Password</label>
-                                    <input type="password" id="changeAdminPass"
-                                        class="bg-slate-800 border border-slate-500 text-white text-sm rounded-lg block w-full p-2"
-                                        placeholder="New Password">
+                                <div class="flex gap-2 mb-3">
+                                    <input type="text" id="portColorName" class="input-light flex-1" placeholder="Port Name (e.g. JAPAN)">
+                                    <input type="color" id="portColorPicker" class="h-10 w-14 cursor-pointer rounded-lg border border-slate-500" value="#22c55e">
                                 </div>
-                                <button onclick="saveAdminConfig()"
-                                    class="w-full bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-2 rounded shadow mt-2">Update
-                                    Credentials</button>
+                                <button onclick="savePortColor()"
+                                    class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-lg shadow text-sm">
+                                    <i class="fa-solid fa-floppy-disk mr-2"></i>Save Color
+                                </button>
+                            </div>
+                            <div>
+                                <div class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+                                    <i class="fa-solid fa-list mr-1 text-teal-400"></i>Port Color List
+                                </div>
+                                <ul id="adminPortColorList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 overflow-y-auto" style="max-height:62vh;"></ul>
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- Clear Data -->
-                <div class="md:col-span-3 text-right">
-                    <button onclick="hardReset()" class="text-red-500 text-xs hover:text-red-700 underline">Factory
-                        Reset (Clear All)</button>
-                </div>
-            </div>
+                    <!-- ─── PANEL: SECURITY ─── -->
+                    <div id="asPanel-security" class="admin-panel hidden bg-slate-800/50 border border-slate-700 rounded-2xl p-5 flex-1">
+                        <div class="max-w-lg">
+                            <div class="bg-slate-700/50 p-5 rounded-xl border border-yellow-600/20">
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-300 mb-1">Change Username</label>
+                                        <input type="text" id="changeAdminUser"
+                                            class="bg-slate-800 border border-slate-500 text-white text-sm rounded-lg block w-full p-2.5 focus:border-yellow-400 outline-none">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-bold text-slate-300 mb-1">New Password</label>
+                                        <input type="password" id="changeAdminPass"
+                                            class="bg-slate-800 border border-slate-500 text-white text-sm rounded-lg block w-full p-2.5 focus:border-yellow-400 outline-none"
+                                            placeholder="Enter new password">
+                                    </div>
+                                    <button onclick="saveAdminConfig()"
+                                        class="w-full bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-2.5 rounded-lg shadow">
+                                        <i class="fa-solid fa-key mr-2"></i>Update Credentials
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div><!-- /main content -->
+            </div><!-- /flex -->
         </div>
     </main>
 
@@ -1101,7 +1216,20 @@
         }
 
         window.getGangData = function (v, gangName) {
-            if (!v.gangPeriods || !v.gangPeriods[gangName]) return { status: 'working', periods: v.periods || [] };
+            if (!v.gangPeriods || !v.gangPeriods[gangName]) {
+                // If vessel has explicit periods use them, otherwise derive start from first gang log
+                if (v.periods && v.periods.length > 0) return { status: 'working', periods: v.periods };
+                if (v.logs && v.logs.length > 0) {
+                    const gangLogs = v.logs.filter(l => l.gang === gangName);
+                    if (gangLogs.length > 0) {
+                        const firstTs = gangLogs.reduce((min, l) => l.timestamp < min ? l.timestamp : min, gangLogs[0].timestamp);
+                        const d = new Date(firstTs);
+                        const startStr = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+                        return { status: 'working', periods: [{ id: 1, name: "P1", start: startStr, end: null }] };
+                    }
+                }
+                return { status: 'working', periods: [] };
+            }
             const gp = v.gangPeriods[gangName]; const lastP = gp[gp.length - 1];
             const status = lastP && !lastP.end ? 'working' : 'break';
             return { status, periods: gp };
@@ -1500,7 +1628,19 @@
 
         window.executeGangAction = function (gangName, action) {
             const v = window.appData.vessels.find(x => x.id === window.activeVesselId); if (!v) return;
-            if (!v.gangPeriods) v.gangPeriods = {}; if (!v.gangPeriods[gangName]) v.gangPeriods[gangName] = JSON.parse(JSON.stringify(v.periods || []));
+            if (!v.gangPeriods) v.gangPeriods = {};
+            if (!v.gangPeriods[gangName]) {
+                // Derive initial period start from first log for this gang
+                const gangLogs = (v.logs || []).filter(l => l.gang === gangName);
+                if (gangLogs.length > 0) {
+                    const firstTs = gangLogs.reduce((min, l) => l.timestamp < min ? l.timestamp : min, gangLogs[0].timestamp);
+                    const d = new Date(firstTs);
+                    const s = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+                    v.gangPeriods[gangName] = [{ id: 1, name: "P1", start: s, end: null }];
+                } else {
+                    v.gangPeriods[gangName] = JSON.parse(JSON.stringify(v.periods || []));
+                }
+            }
             const gp = v.gangPeriods[gangName]; const nowTime = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
             if (action === 'break') { if (gp.length > 0) gp[gp.length - 1].end = nowTime; } else { const nextId = gp.length + 1; gp.push({ id: Date.now(), name: "P" + nextId, start: nowTime, end: null }); }
             window.saveData();
@@ -1511,8 +1651,8 @@
             const v = window.appData.vessels.find(x => x.id === window.activeVesselId); if (!v) return window.goToOverview();
             document.getElementById('detailVesselName').innerText = v.name; document.getElementById('detailVesselVoy').innerText = v.voy;
 
-            let displayTime = v.startTime;
-            let timeBadge = '<span class="text-slate-500 text-[10px] ml-1">(Plan)</span>';
+            let displayTime = v.startTime || '--:--';
+            let timeBadge = v.startTime ? '<span class="text-slate-500 text-[10px] ml-1">(Plan)</span>' : '<span class="text-slate-500 text-[10px] ml-1">(Waiting)</span>';
             let timeColor = "text-slate-300";
 
             if (v.logs && v.logs.length > 0) {
@@ -1809,10 +1949,35 @@
             window.render();
         }
 
+        window.showAdminSection = function (name) {
+            const sections = ['vessels', 'stock', 'gangs', 'ports', 'security'];
+            const meta = {
+                vessels:  { title: 'Manage Vessels',    desc: 'Add, edit or remove vessel records',    icon: 'fa-ship',          color: 'text-blue-400',   bg: 'bg-blue-600/20 border-blue-500/30' },
+                stock:    { title: 'Manage Stock',       desc: 'Import and manage vessel cargo',        icon: 'fa-layer-group',   color: 'text-green-400',  bg: 'bg-green-600/20 border-green-500/30' },
+                gangs:    { title: 'Manage Gangs',       desc: 'Configure work gangs globally',         icon: 'fa-users-gear',    color: 'text-purple-400', bg: 'bg-purple-600/20 border-purple-500/30' },
+                ports:    { title: 'Port Colors',        desc: 'Color-code port destinations',          icon: 'fa-palette',       color: 'text-teal-400',   bg: 'bg-teal-600/20 border-teal-500/30' },
+                security: { title: 'Admin Security',     desc: 'Update admin login credentials',        icon: 'fa-shield-halved', color: 'text-yellow-400', bg: 'bg-yellow-600/20 border-yellow-500/30' },
+            };
+            sections.forEach(s => {
+                document.getElementById('asPanel-' + s)?.classList.add('hidden');
+                document.getElementById('asSide-' + s)?.classList.remove('as-active');
+            });
+            document.getElementById('asPanel-' + name)?.classList.remove('hidden');
+            document.getElementById('asSide-' + name)?.classList.add('as-active');
+            const m = meta[name];
+            if (!m) return;
+            document.getElementById('adminSectionTitle').textContent = m.title;
+            document.getElementById('adminSectionDesc').textContent = m.desc;
+            const iconEl = document.getElementById('adminSectionIcon');
+            iconEl.className = 'w-10 h-10 rounded-xl flex items-center justify-center border text-sm shrink-0 ' + m.color + ' ' + m.bg;
+            iconEl.innerHTML = '<i class="fa-solid ' + m.icon + '"></i>';
+        };
+
         window.goToAdmin = function () {
             if (window.isAdminLoggedIn) {
                 window.currentView = 'admin';
                 window.render();
+                window.showAdminSection('vessels');
             } else {
                 document.getElementById('adminLoginModal').classList.remove('hidden');
                 document.getElementById('adminLoginPass').value = '';
@@ -1879,6 +2044,7 @@
             const btnDash = document.getElementById('btn-dash'); const btnAdmin = document.getElementById('btn-admin');
             btnDash.className = "px-4 py-2 rounded text-sm font-bold transition " + (window.currentView !== 'admin' ? "bg-blue-600 text-white shadow-lg" : "bg-slate-700 text-slate-300 hover:text-white");
             btnAdmin.className = "px-4 py-2 rounded text-sm font-bold transition " + (window.currentView === 'admin' ? "bg-blue-600 text-white shadow-lg" : "bg-slate-700 text-slate-300 hover:text-white");
+            document.body.classList.toggle('admin-mode', window.currentView === 'admin');
             if (window.currentView === 'overview') { document.getElementById('view-overview').classList.remove('hidden'); renderOverview(); }
             else if (window.currentView === 'detail') { document.getElementById('view-detail').classList.remove('hidden'); window.renderVesselDetail(); }
             else if (window.currentView === 'admin') { document.getElementById('view-admin').classList.remove('hidden'); window.renderAdmin(); window.updateAdminStockForm(); }
@@ -1897,9 +2063,9 @@
 
         window.hardReset = function () { if (confirm("⚠ DANGER: This will delete ALL data. Confirm?")) { window.appData = { vessels: [], gangs: ["Gang 1"], breaks: [] }; window.saveData(); location.reload(); } }
         window.addNewVessel = function () {
-            const name = document.getElementById('newVesName').value; const voy = document.getElementById('newVesVoy').value; const time = document.getElementById('newVesTime').value;
+            const name = document.getElementById('newVesName').value; const voy = document.getElementById('newVesVoy').value;
             if (!name || !voy) { window.showAlert("Please enter Name and Voyage"); return; }
-            window.appData.vessels.push({ id: Date.now(), name: name, voy: voy, startTime: time, stocks: [], logs: [], periods: [{ id: 1, name: "P1", start: time, end: null }], gangPeriods: {}, status: 'working' });
+            window.appData.vessels.push({ id: Date.now(), name: name, voy: voy, stocks: [], logs: [], periods: [], gangPeriods: {}, status: 'working' });
             document.getElementById('newVesName').value = ''; document.getElementById('newVesVoy').value = ''; window.saveData();
         }
         window.deleteVessel = function (id) { if (confirm("Delete this vessel?")) { window.appData.vessels = window.appData.vessels.filter(v => v.id !== id); if (window.activeVesselId === id) window.activeVesselId = null; window.saveData(); } }
@@ -2041,23 +2207,78 @@
         window.closeGangModal = function () { document.getElementById('gangDetailModal').classList.add('hidden'); }
         window.closePeriodReport = function () { document.getElementById('periodReportModal').classList.add('hidden'); }
 
-        window.renderAdmin = function () {
-            const l = document.getElementById('adminVesselList'); let _alHtml = ''; window.appData.vessels.forEach(v => _alHtml += `<li class="flex justify-between bg-gray-100 p-2 rounded text-sm"><span class="font-bold text-blue-800">${v.name}</span><button onclick="deleteVessel(${v.id})" class="text-red-500"><i class="fa-solid fa-trash-can"></i></button></li>`); l.innerHTML = _alHtml;
-            const s = document.getElementById('adminVesselSelect'); let _asHtml = '<option value="">-- No Vessel --</option>'; window.appData.vessels.forEach(v => _asHtml += `<option value="${v.id}">${v.name}</option>`); s.innerHTML = _asHtml;
-            if (window.activeVesselId) s.value = window.activeVesselId;
+        /* ── helper: get YYYY-MM from a vessel id (timestamp) ── */
+        function vesselMonth(v) {
+            const d = new Date(v.id);
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+        }
 
-            // Render Gang List (Dependent on vessel selection)
+        /* ── helper: get filtered+sorted vessel array ── */
+        function getFilteredVessels(monthInputId) {
+            const m = (document.getElementById(monthInputId) || {}).value || '';
+            let list = [...window.appData.vessels].reverse(); // newest first
+            if (m) list = list.filter(v => vesselMonth(v) === m);
+            return list;
+        }
+
+        /* ── render vessel list (Vessels panel) ── */
+        window.renderAdminVesselList = function () {
+            const l = document.getElementById('adminVesselList');
+            if (!l) return;
+            const list = getFilteredVessels('vesMonthFilter');
+            const badge = document.getElementById('vesCountBadge');
+            if (badge) badge.textContent = list.length + ' vessel' + (list.length !== 1 ? 's' : '');
+            l.innerHTML = list.map(v => {
+                const mon = vesselMonth(v);
+                return `<li class="flex justify-between items-center bg-slate-700/60 hover:bg-slate-600/60 border border-slate-600 px-3 py-2.5 rounded-lg text-sm transition">
+                    <div class="min-w-0 mr-2">
+                        <div class="font-bold text-blue-300 truncate"><i class="fa-solid fa-ship text-slate-500 mr-2 text-xs"></i>${v.name}</div>
+                        <div class="text-[10px] text-slate-500 mt-0.5">${v.voy || ''} · ${mon}</div>
+                    </div>
+                    <button onclick="deleteVessel(${v.id})" class="text-red-400 hover:text-red-300 shrink-0 p-1"><i class="fa-solid fa-trash-can text-xs"></i></button>
+                </li>`;
+            }).join('');
+        };
+
+        /* ── render vessel dropdown (Stock panel) ── */
+        window.renderAdminStockSelect = function () {
+            const s = document.getElementById('adminVesselSelect');
+            if (!s) return;
+            const list = getFilteredVessels('stockMonthFilter');
+            let html = '<option value="">-- Select Vessel --</option>';
+            list.forEach(v => { html += `<option value="${v.id}">${v.name} (${vesselMonth(v)})</option>`; });
+            s.innerHTML = html;
+            if (window.activeVesselId && list.find(v => v.id === window.activeVesselId)) {
+                s.value = window.activeVesselId;
+            }
+        };
+
+        window.renderAdmin = function () {
+            // Set default month filters to current month on first call
+            const now = new Date();
+            const curMonth = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+            const vmf = document.getElementById('vesMonthFilter');
+            if (vmf && !vmf.value) vmf.value = curMonth;
+            const smf = document.getElementById('stockMonthFilter');
+            if (smf && !smf.value) smf.value = curMonth;
+
+            window.renderAdminVesselList();
+            window.renderAdminStockSelect();
+            if (window.activeVesselId) {
+                const s = document.getElementById('adminVesselSelect');
+                if (s) s.value = window.activeVesselId;
+            }
+
             window.renderAdminGangList();
 
-            const bl = document.getElementById('adminBreakList'); let _blHtml = ''; window.appData.breaks.forEach((b, i) => _blHtml += `<li class="flex justify-between bg-orange-50 p-2 rounded text-sm"><span>${b.name}: ${b.start}-${b.end}</span><button onclick="deleteBreak(${i})" class="text-red-400"><i class="fa-solid fa-trash-can"></i></button></li>`); bl.innerHTML = _blHtml;
             const pcl = document.getElementById('adminPortColorList'); let _pclHtml = '';
             if (window.appData.portColors) {
                 Object.entries(window.appData.portColors).forEach(([p, c]) => {
-                    _pclHtml += `<li class="flex justify-between p-2 bg-gray-50 text-sm border-b last:border-0">
-                        <div class="flex gap-2 items-center"><span class="w-4 h-4 rounded-full border border-gray-300" style="background:${c}"></span><span class="font-bold">${p}</span></div>
+                    _pclHtml += `<li class="flex justify-between items-center bg-slate-700/60 border border-slate-600 px-3 py-2 rounded-lg text-sm">
+                        <div class="flex gap-2 items-center"><span class="w-5 h-5 rounded-full border-2 border-slate-500 shrink-0" style="background:${c}"></span><span class="font-bold text-slate-200">${p}</span></div>
                         <div class="flex gap-3">
-                            <button onclick="editPortColor('${window.escapeStr(p)}', '${c}')" class="text-blue-500 hover:text-blue-700 transition"><i class="fa-solid fa-pen"></i></button>
-                            <button onclick="deletePortColor('${window.escapeStr(p)}')" class="text-red-400 hover:text-red-600 transition"><i class="fa-solid fa-trash-can"></i></button>
+                            <button onclick="editPortColor('${window.escapeStr(p)}', '${c}')" class="text-blue-400 hover:text-blue-300 transition"><i class="fa-solid fa-pen text-xs"></i></button>
+                            <button onclick="deletePortColor('${window.escapeStr(p)}')" class="text-red-400 hover:text-red-300 transition"><i class="fa-solid fa-trash-can text-xs"></i></button>
                         </div>
                     </li>`;
                 });
@@ -2101,20 +2322,20 @@
                 let _glHtml = '';
                 window.appData.gangs.forEach(g => {
                     const isDisabled = currentVessel.disabledGangs.includes(g);
-                    const opacity = isDisabled ? 'opacity-50' : '';
+                    const opacity = isDisabled ? 'opacity-40' : '';
                     const icon = isDisabled ? 'fa-toggle-off' : 'fa-toggle-on';
-                    const iconColor = isDisabled ? 'text-gray-400' : 'text-green-500';
-                    const labelColor = isDisabled ? 'text-gray-400 line-through' : 'text-slate-800';
+                    const iconColor = isDisabled ? 'text-slate-500' : 'text-green-400';
+                    const labelColor = isDisabled ? 'text-slate-500 line-through' : 'text-slate-200';
 
                     _glHtml += `
-                    <li class="flex justify-between items-center bg-gray-50 p-2 rounded text-sm border border-slate-100 ${opacity}">
-                        <span onclick="renameGang('${window.escapeStr(g)}')" class="cursor-pointer font-bold ${labelColor}">${g}</span>
+                    <li class="flex justify-between items-center bg-slate-700/60 border border-slate-600 px-3 py-2 rounded-lg text-sm ${opacity}">
+                        <span onclick="renameGang('${window.escapeStr(g)}')" class="cursor-pointer font-bold ${labelColor} hover:text-white transition" title="Click to rename">${g}</span>
                         <div class="flex gap-2 items-center">
-                            <button onclick="toggleGang('${window.escapeStr(g)}')" class="text-2xl ${iconColor} hover:scale-110 transition focus:outline-none">
+                            <button onclick="toggleGang('${window.escapeStr(g)}')" class="text-xl ${iconColor} hover:scale-110 transition focus:outline-none">
                                 <i class="fa-solid ${icon}"></i>
                             </button>
-                            <button onclick="deleteGang('${window.escapeStr(g)}')" class="text-red-400 ml-2 hover:text-red-600 focus:outline-none">
-                                <i class="fa-solid fa-trash-can"></i>
+                            <button onclick="deleteGang('${window.escapeStr(g)}')" class="text-red-400 hover:text-red-300 ml-1 focus:outline-none">
+                                <i class="fa-solid fa-trash-can text-xs"></i>
                             </button>
                         </div>
                     </li>`;
@@ -2124,7 +2345,7 @@
                 // No Vessel Selected
                 vesselNameEl.classList.add('hidden');
                 helpText.classList.remove('hidden');
-                gl.innerHTML = '<li class="text-center text-gray-400 italic p-4">Please select a vessel to manage gangs.</li>';
+                gl.innerHTML = '<li class="text-center text-slate-500 italic p-4">Please select a vessel to manage gangs.</li>';
             }
         }
 
@@ -2137,9 +2358,9 @@
             let _bHtml = '';
             if (v) {
                 (v.stocks || []).filter(s => s.type === type).forEach(s => {
-                    const typeBadge = s.type === 'discharge' ? '<span class="text-pink-600 font-bold">D</span>' : '<span class="text-blue-600 font-bold">L</span>';
+                    const typeBadge = s.type === 'discharge' ? '<span class="text-xs font-bold bg-pink-900/50 text-pink-300 px-1.5 py-0.5 rounded">D</span>' : '<span class="text-xs font-bold bg-blue-900/50 text-blue-300 px-1.5 py-0.5 rounded">L</span>';
                     const pColor = getPortColor(s.port);
-                    _bHtml += `<tr><td class="p-3">${typeBadge}</td><td class="p-3 font-bold">${s.model}</td><td class="p-3 font-bold" style="color:${pColor}">${s.port || '-'}</td><td class="p-3 font-bold text-gray-500">${s.port2 || '-'}</td><td class="p-3 text-right">${s.plan}</td><td class="p-3 text-center flex gap-2 justify-center"><button onclick="openEditStock(${v.id},${s.id})" class="text-blue-500 hover:text-blue-700 bg-blue-100 p-1 rounded"><i class="fa-solid fa-pen"></i></button><button onclick="deleteStock(${v.id},${s.id})" class="text-red-500 hover:text-red-700 bg-red-100 p-1 rounded"><i class="fa-solid fa-trash"></i></button></td></tr>`;
+                    _bHtml += `<tr class="hover:bg-slate-700/30 transition"><td class="p-3">${typeBadge}</td><td class="p-3 font-bold text-slate-200">${s.model}</td><td class="p-3 font-bold" style="color:${pColor}">${s.port || '-'}</td><td class="p-3 text-slate-400">${s.port2 || '-'}</td><td class="p-3 text-right text-slate-200">${s.plan}</td><td class="p-3 text-center"><div class="flex gap-1.5 justify-center"><button onclick="openEditStock(${v.id},${s.id})" class="text-blue-400 hover:text-blue-200 bg-blue-900/40 hover:bg-blue-800/60 p-1.5 rounded transition"><i class="fa-solid fa-pen text-xs"></i></button><button onclick="deleteStock(${v.id},${s.id})" class="text-red-400 hover:text-red-200 bg-red-900/40 hover:bg-red-800/60 p-1.5 rounded transition"><i class="fa-solid fa-trash text-xs"></i></button></div></td></tr>`;
                 });
             }
             b.innerHTML = _bHtml;
@@ -2228,13 +2449,11 @@
             const remainingGlobal = totalPlan - totalLoaded;
 
             if (totalLoaded > 0 && v.logs && v.logs.length > 0) {
-                const firstLog = v.logs[v.logs.length - 1];
-                const startTime = firstLog.timestamp;
+                const startTime = v.logs.reduce((min, l) => l.timestamp < min ? l.timestamp : min, v.logs[0].timestamp);
                 let endTime = Date.now();
 
                 if (totalPlan > 0 && remainingGlobal <= 0) {
-                    const lastLog = v.logs[0];
-                    endTime = lastLog.timestamp;
+                    endTime = v.logs.reduce((max, l) => l.timestamp > max ? l.timestamp : max, v.logs[0].timestamp);
                 }
 
                 const durationMs = Math.max(0, endTime - startTime);
